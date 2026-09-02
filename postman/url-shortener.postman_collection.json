@@ -1,0 +1,1191 @@
+{
+  "info": {
+    "name": "URL Shortener API",
+    "description": "Multi-tenant URL shortener \u2014 AI-Assisted Engineering Assignment (Charles Schwab). Run the '0. Setup' request first (or the Collection Runner on the whole collection top-to-bottom) \u2014 it captures apiKey automatically for every other request via the {{apiKey}} collection variable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "apiKey2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "shortCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customAlias",
+      "value": "schwab-pricing",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminKey",
+      "value": "admin-dev-only-key-change-me",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Register Tenant (get API key)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('apiKey', body.apiKey);",
+                  "console.log('Saved apiKey:', body.apiKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"acme-corp\",\n  \"plan\": \"STANDARD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants"
+              ]
+            },
+            "description": "Public \u2014 no API key needed. This is the only way to get one. The response's apiKey is shown exactly once; this request auto-saves it into {{apiKey}} for every other request in this collection."
+          }
+        },
+        {
+          "name": "Register Second Tenant (for cross-tenant / fairness tests)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('apiKey2', body.apiKey);",
+                  "console.log('Saved apiKey2:', body.apiKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"other-tenant\",\n  \"plan\": \"PREMIUM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants"
+              ]
+            },
+            "description": "A second, independent tenant \u2014 used by the cross-tenant 404 test and to demonstrate that rate limiting is per-tenant, not global."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Tenant",
+      "item": [
+        {
+          "name": "GET Me (confirm key works)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. URL Shortener",
+      "item": [
+        {
+          "name": "POST Create Short URL (system-generated code)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('shortCode', body.shortCode);",
+                  "console.log('Saved shortCode:', body.shortCode);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/research\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "description": "Auto-saves the returned shortCode into {{shortCode}} for the requests below."
+          }
+        },
+        {
+          "name": "POST Create with Custom Alias",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/pricing\",\n  \"customAlias\": \"{{customAlias}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Create with Expiry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/promo\",\n  \"expiresAt\": \"2026-12-31T00:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE Deactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}"
+              ]
+            },
+            "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Redirect (public \u2014 no API key)",
+      "item": [
+        {
+          "name": "GET Redirect by shortCode",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{shortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{shortCode}}"
+              ]
+            },
+            "description": "Postman follows redirects by default (302 -> Location). Check the 'Location' response header, or disable 'Automatically follow redirects' in Settings to see the raw 302."
+          }
+        },
+        {
+          "name": "GET Redirect by Custom Alias",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{customAlias}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{customAlias}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Billing",
+      "item": [
+        {
+          "name": "GET Current Billing Statement",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/billing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "billing"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Invoice",
+      "item": [
+        {
+          "name": "POST Generate Invoice (current period)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('invoiceId', body.invoiceId);",
+                  "    console.log('Saved invoiceId:', body.invoiceId);",
+                  "} else {",
+                  "    console.log('Not 201 (likely 409 \u2014 an invoice for this period already exists). invoiceId left unchanged.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices"
+              ]
+            },
+            "description": "No body needed for the current period. Returns 409 if already generated this period \u2014 see '6. Error Cases' for that flow deliberately."
+          }
+        },
+        {
+          "name": "POST Generate Invoice (specific past period)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billingPeriod\": \"2026-08\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET One Invoice",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices/{{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Download Invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices/{{invoiceId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices",
+                "{{invoiceId}}",
+                "pdf"
+              ]
+            },
+            "description": "Postman renders PDF responses in the 'Preview' pane of the response viewer, or use 'Save Response > Save to a file'."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Admin",
+      "item": [
+        {
+          "name": "GET List All Tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Tenant Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "1"
+              ]
+            },
+            "description": "Replace 1 with a real tenantId from the list above (e.g. the tenantId returned by 0. Setup > Register Tenant)."
+          }
+        },
+        {
+          "name": "PATCH Update Tenant Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"PREMIUM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "1",
+                "plan"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Suspend Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "1",
+                "status"
+              ]
+            },
+            "description": "Blocks that tenant's API key immediately. Run PATCH with {\"active\": true} to reinstate."
+          }
+        },
+        {
+          "name": "GET Tenant's URLs (cross-tenant)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "1",
+                "urls"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Platform Usage Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "usage"
+              ]
+            }
+          }
+        },
+        {
+          "name": "401 - No Admin Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - Tenant Key on Admin Route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403 (authenticated, wrong role)', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants"
+              ]
+            },
+            "description": "A valid tenant key is a real credential, just the wrong role \u2014 403, not 401."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Error Cases",
+      "item": [
+        {
+          "name": "401 - No API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/anything/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "anything",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "401 - Invalid API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "not-a-real-key"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/anything/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "anything",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - Unknown Short Code (management)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/doesNotExist1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "doesNotExist1",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - Unknown Short Code (redirect)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doesNotExist1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doesNotExist1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - Root Path (no route defined)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "409 - Duplicate Custom Alias",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://example.com\",\n  \"customAlias\": \"{{customAlias}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "description": "Run '2. URL Shortener > POST Create with Custom Alias' first so this alias already exists."
+          }
+        },
+        {
+          "name": "400 - Invalid originalUrl",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"not-a-url\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - Cross-Tenant Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404 (not 403 - existence is not confirmed)', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey2}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}",
+                "stats"
+              ]
+            },
+            "description": "Run '0. Setup > Register Second Tenant' first. Uses apiKey2 to try reading a link owned by apiKey's tenant \u2014 proves tenant isolation (404, never 403, so existence isn't leaked)."
+          }
+        },
+        {
+          "name": "409 - Duplicate Invoice (same period)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me",
+                "invoices"
+              ]
+            },
+            "description": "Run '5. Invoice > POST Generate Invoice (current period)' first so one already exists for this period."
+          }
+        },
+        {
+          "name": "429 - Rate Limit (run via Collection Runner, ~25 iterations)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('status:', pm.response.code, '| X-RateLimit-Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('rate limited as expected', () => pm.response.to.have.status(429));",
+                  "    console.log('Retry-After:', pm.response.headers.get('Retry-After'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me"
+              ]
+            },
+            "description": "A single hit returns 200 with X-RateLimit-* headers. To actually trip the STANDARD-plan limit (default 20/min), select just this request in Collection Runner and set Iterations to 25 \u2014 you'll see 200s flip to 429s partway through. Run the same against apiKey2 afterward to confirm the other tenant is unaffected."
+          }
+        }
+      ]
+    }
+  ]
+}
