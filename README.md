@@ -26,7 +26,7 @@ See also:
 | Config                  | `.properties` files + Spring profiles (`dev`, `prod`, `test`)     |
 | Error handling          | `@RestControllerAdvice` centralized exception mapping             |
 | Test                    | JUnit 5, Mockito, AssertJ, Spring `MockMvc`, `spring-security-test`, `@WebMvcTest`, `@SpringBootTest` |
-| Coverage                | JaCoCo (>=75% line coverage gate on `mvn verify` — see note in `pom.xml`) |
+| Coverage                | JaCoCo (>=80% line coverage gate on `mvn verify` — see note in `pom.xml`) |
 
 ## 2. Project Layout
 

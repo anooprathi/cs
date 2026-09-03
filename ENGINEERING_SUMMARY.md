@@ -45,9 +45,10 @@ high-level. Normalized into a concrete engineering problem:
 - Test scaffolding (unit + integration) was **generated** from the service/controller contracts, then
   **edited** to add negative-path cases the first draft omitted: expired-link redirect, malformed JSON,
   duplicate-alias race, generation-exhaustion.
-- Quality gates applied: JaCoCo coverage gate (originally set to 80% line; lowered to the 75% `pom.xml`
-  currently enforces during the tenancy/security/rate-limiting/billing pass — see §6's Limitations for why,
-  and the current live value is always `pom.xml`'s, not this historical note); manual review of every
+- Quality gates applied: JaCoCo coverage gate (originally set to 80% line; lowered to 75% during the
+  tenancy/security/rate-limiting/billing pass — see §6's Limitations for why — then restored to 80% once
+  targeted new tests closed the gaps that justified lowering it, see §16; the current live value is always
+  `pom.xml`'s, not this historical note); manual review of every
   generated file for Spring idioms and security implications before acceptance (see §5 for what a real
   `mvn verify` run would additionally need to confirm, given this sandbox's constraints — noted in
   Limitations).
@@ -580,3 +581,39 @@ edited into looking like this was always known to work.
 These placeholder rows are deliberate, not an oversight — the actual figures live in the verifier's terminal
 output, not in this authoring environment, and inventing plausible-looking numbers here would be a more
 serious integrity failure than leaving them honestly blank pending the real values.
+
+## 16. Addendum — JaCoCo Restored to 80%, With Actual New Coverage Behind It
+
+Requested directly: raise the gate back to 0.80 (from the 0.75 it was lowered to during the tenancy/
+security/billing pass — see §6) and increase unit/integration testing to support it. Raising the number
+alone would have been meaningless — if measured coverage doesn't actually clear 0.80, `mvn clean verify`
+simply starts failing where it passed before. So this added real tests for the two clearest zero-coverage
+gaps identified in the earlier code-review pass (§13), not just adjusted a threshold:
+
+- **`ExpiredUrlCleanupServiceTest`** — this class had *zero* test coverage of any kind before now. It's a
+  `@Scheduled` method firing every 10 minutes; no integration test's timeframe would ever naturally trigger
+  it. Tested directly as a plain unit test (call the method, don't wait on the scheduler) — three cases:
+  nothing expired (no-op), a batch of expired mappings gets deactivated and saved, and the service only acts
+  on exactly what the repository query hands it rather than separately widening the set.
+- **`GlobalExceptionHandlerTest`** — closes the specific handler branches no integration test reaches:
+  `RateLimitExceededException` (the test profile deliberately sets generous limits, so nothing in the
+  integration suite ever actually exhausts one) and `MethodArgumentTypeMismatchException` (nothing sends a
+  non-numeric path variable to a typed endpoint anywhere else). Also tests `handleIllegalArgument` directly
+  — worth noting honestly that nothing in this codebase's current business logic actually throws a bare
+  `IllegalArgumentException`, so that handler may be effectively unreachable in practice; testing it directly
+  means it's verified rather than left as unverified dead code either way, which is the more defensible state
+  for reachable-but-unexercised code to be in.
+- **`AsyncConfigTest`** — the sync-vs-real-executor branch (`app.async.metering.enabled`) that makes
+  `UsageMeteringService`'s test-determinism story actually work (§12) had never been asserted directly,
+  only relied upon implicitly by every test that happened to run under the `test` profile.
+
+**What this does and doesn't establish.** These tests close the most clearly-identified, highest-value gaps
+— not every possible one. `SecurityConfig`, `OpenApiConfig`, `DevDataSeeder`, and the servlet filters as
+isolated units remain covered only indirectly, through the app successfully booting under integration tests
+— inherent to what those classes are (bean-wiring, mostly), not the same category of gap a unit test closes
+the same way. Whether the bundle-wide line ratio JaCoCo actually reports now clears 0.80 is **not something
+this pass can verify** — the same standing limitation as everywhere else in this document: no compiler in
+the authoring environment, so this is confident-but-unconfirmed until `mvn clean verify` is run for real. If
+it doesn't clear 0.80, that's genuinely useful information, not a failure of this pass — the JaCoCo HTML
+report (`target/site/jacoco/index.html`) will show precisely which classes and lines are still short, making
+the next round of test-writing targeted rather than guesswork.

@@ -230,16 +230,22 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <!-- Lowered from 0.80 to 0.75 in an earlier pass: the tenancy/
-                                                 security/rate-limiting additions include several
-                                                 infrastructure classes (SecurityConfig, the two servlet
-                                                 filters, OpenApiConfig, DevDataSeeder) that are exercised
-                                                 indirectly through the integration tests rather than given
-                                                 dedicated unit tests, per the assignment's coverage
-                                                 expectation balanced against time-box — see
-                                                 ENGINEERING_SUMMARY.md. Raise back to 0.80 once those gaps
-                                                 are closed. -->
-                                            <minimum>0.75</minimum>
+                                            <!-- Restored to 0.80: dedicated unit tests were added for the
+                                                 two classes that had zero direct coverage
+                                                 (ExpiredUrlCleanupServiceTest — a @Scheduled method no
+                                                 integration test's timeframe would ever naturally trigger;
+                                                 GlobalExceptionHandlerTest — covers the handler branches no
+                                                 integration test reaches, since application-test.properties
+                                                 deliberately sets generous rate limits and nothing sends a
+                                                 non-numeric path variable anywhere). SecurityConfig,
+                                                 OpenApiConfig, DevDataSeeder, and AsyncConfig remain covered
+                                                 only indirectly (via the app booting successfully under
+                                                 integration tests) — inherent to config/bean-wiring classes,
+                                                 not a gap the same kind of unit test would meaningfully close.
+                                                 If this bundle-wide ratio doesn't actually clear 0.80 once
+                                                 measured for real, that's real signal to add more, not a
+                                                 reason to lower it back — see ENGINEERING_SUMMARY.md. -->
+                                            <minimum>0.80</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
