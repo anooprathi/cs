@@ -1,4 +1,4 @@
-package com.schwab.urlshortener.service.impl;
+package com.schwab.urlshortener.service.safety;
 
 import com.schwab.urlshortener.service.UrlSafetyChecker;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

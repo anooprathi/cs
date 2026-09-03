@@ -38,6 +38,18 @@ import java.time.Instant;
  * infrastructure than this system needs today, and called out here
  * rather than silently deferred.
  *
+ * A second, more precise risk worth naming explicitly (not just "a crash
+ * could lose an event"): because this call is fire-and-forget with no
+ * transaction coordination back to the caller, the async write can
+ * complete and commit BEFORE the caller's own transaction commits — and
+ * if the caller's transaction later rolls back for an unrelated reason,
+ * the result is a usage record for an operation that never actually
+ * happened (not just a missing one). Low-probability today (nothing in
+ * UrlShortenerServiceImpl currently rolls back createShortUrl after
+ * calling this), but it's a real gap in the trade-off above, not covered
+ * by "might lose an event," and would need the same durable-outbox fix
+ * to close if it ever became a real concern.
+ *
  * Concurrency: increments are attempted directly first (the common case,
  * once a period's row exists); on the rare "row doesn't exist yet this
  * month" case, this falls back to insert-then-retry via

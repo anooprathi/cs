@@ -1,4 +1,4 @@
-package com.schwab.urlshortener.service.impl;
+package com.schwab.urlshortener.service.shortcode;
 
 import com.schwab.urlshortener.service.ShortCodeGenerator;
 import com.schwab.urlshortener.util.Base62Encoder;

@@ -1,6 +1,8 @@
 package com.schwab.urlshortener.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.schwab.urlshortener.billing.InvoiceRepository;
+import com.schwab.urlshortener.billing.TenantUsageRecordRepository;
 import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.entity.UrlMapping;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
@@ -52,10 +54,26 @@ class UrlShortenerIntegrationTest {
     @Autowired
     private TenantRepository tenantRepository;
 
+    @Autowired
+    private TenantUsageRecordRepository tenantUsageRecordRepository;
+
+    @Autowired
+    private InvoiceRepository invoiceRepository;
+
     private String apiKey;
 
     @BeforeEach
     void setUp() throws Exception {
+        // Deleted in FK-safe order: usage records and invoices reference
+        // tenantId (no formal FK constraint, but logically dependent),
+        // url mappings reference tenantId too — clear the "leaf" tables
+        // before the tenants they point at. Previously only url mappings
+        // and tenants were cleared here; usage/invoice rows from earlier
+        // test methods within the same test class's shared H2 instance
+        // quietly accumulated across the run (harmless today since tenant
+        // ids never repeat, but untidy and worth cleaning up properly).
+        invoiceRepository.deleteAll();
+        tenantUsageRecordRepository.deleteAll();
         repository.deleteAll();
         tenantRepository.deleteAll();
         apiKey = registerTenant("acme-" + System.nanoTime(), RateLimitPlan.STANDARD);

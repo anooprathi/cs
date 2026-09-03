@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * Declarative (Spring Cloud OpenFeign) client for an external URL-reputation
  * check service. This is an extension point, not part of the default
- * request path: see {@link com.schwab.urlshortener.service.impl.FeignUrlSafetyChecker}
+ * request path: see {@link com.schwab.urlshortener.service.safety.FeignUrlSafetyChecker}
  * for how it is feature-flagged and how failures degrade safely.
  *
  * name/url are externalized so the target can be swapped for a real

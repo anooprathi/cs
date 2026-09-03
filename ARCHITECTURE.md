@@ -241,7 +241,11 @@ real-time balance — occasional undercounting by a handful of events during an 
 risk than losing the click count itself. If billing ever needs to be exact-to-the-event, the correct fix is
 a durable outbox (write the usage event in the *same* transaction as the primary write, then a separate
 process publishes it) — genuinely more infrastructure than this system needs today, called out rather than
-silently deferred. See `UsageMeteringService`'s Javadoc for the full reasoning, and `AsyncConfig`'s for why
+silently deferred. A second, more precise risk beyond "a crash could lose an event": since the async call is
+fire-and-forget with no transaction coordination to the caller, it can complete and commit *before* the
+caller's own transaction commits — if that caller transaction later rolled back for an unrelated reason, the
+result would be a usage record for an operation that never actually happened, not merely a missing one. See
+`UsageMeteringService`'s Javadoc for the full reasoning, and `AsyncConfig`'s for why
 the executor is bounded (Spring's default `SimpleAsyncTaskExecutor` is *unbounded* — a burst of async work
 against it can exhaust threads with no backpressure at all, a genuinely dangerous default to ship).
 

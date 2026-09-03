@@ -2,6 +2,8 @@ package com.schwab.urlshortener.tenant;
 
 import com.schwab.urlshortener.exception.TenantNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +76,27 @@ public class TenantService {
     @Transactional(readOnly = true)
     public List<Tenant> listAll() {
         return repository.findAll();
+    }
+
+    /** Paginated variant for the admin listing endpoint — see AdminController.
+     *  listAll() (unpaginated) stays for internal callers that genuinely
+     *  need every tenant (e.g. AdminService.getUsageSummary's fallback
+     *  path), not removed just because a paginated sibling now exists. */
+    @Transactional(readOnly = true)
+    public Page<Tenant> listAll(Pageable pageable) {
+        return repository.findAll(pageable);
+    }
+
+    /**
+     * Fetches exactly the tenants named by the given ids — used by
+     * AdminService.getUsageSummary to resolve display names for only the
+     * tenants that actually have usage this period, instead of loading
+     * every tenant ever registered just to build a lookup map (see that
+     * method's own comment for why this replaced listAll() there).
+     */
+    @Transactional(readOnly = true)
+    public List<Tenant> findByIds(List<Long> ids) {
+        return repository.findAllById(ids);
     }
 
     @Transactional

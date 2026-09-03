@@ -1,4 +1,4 @@
-package com.schwab.urlshortener.service.impl;
+package com.schwab.urlshortener.service.shortcode;
 
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;

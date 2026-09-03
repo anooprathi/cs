@@ -1,6 +1,8 @@
 package com.schwab.urlshortener.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.schwab.urlshortener.billing.InvoiceRepository;
+import com.schwab.urlshortener.billing.TenantUsageRecordRepository;
 import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
 import com.schwab.urlshortener.security.AdminAuthenticationFilter;
@@ -49,11 +51,19 @@ class AdminIntegrationTest {
     @Autowired
     private UrlMappingRepository urlMappingRepository;
 
+    @Autowired
+    private TenantUsageRecordRepository tenantUsageRecordRepository;
+
+    @Autowired
+    private InvoiceRepository invoiceRepository;
+
     private String tenantApiKey;
     private long tenantId;
 
     @BeforeEach
     void setUp() throws Exception {
+        invoiceRepository.deleteAll();
+        tenantUsageRecordRepository.deleteAll();
         urlMappingRepository.deleteAll();
         tenantRepository.deleteAll();
 
@@ -101,7 +111,8 @@ class AdminIntegrationTest {
         mockMvc.perform(get("/api/v1/admin/tenants")
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.tenantId == " + tenantId + ")].plan", hasItem("STANDARD")));
+                .andExpect(jsonPath("$.content[?(@.tenantId == " + tenantId + ")].plan", hasItem("STANDARD")))
+                .andExpect(jsonPath("$.totalElements", greaterThanOrEqualTo(1)));
     }
 
     @Test
@@ -178,8 +189,9 @@ class AdminIntegrationTest {
         mockMvc.perform(get("/api/v1/admin/tenants/{id}/urls", tenantId)
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].originalUrl", is("https://www.schwab.com/admin-visible")));
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].originalUrl", is("https://www.schwab.com/admin-visible")))
+                .andExpect(jsonPath("$.totalElements", is(1)));
     }
 
     @Test
@@ -204,6 +216,7 @@ class AdminIntegrationTest {
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalApiCalls", greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.activeTenantCount", greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.byTenant[?(@.tenantId == " + tenantId + ")].apiCalls", hasItem(greaterThanOrEqualTo(1))));
     }
 }

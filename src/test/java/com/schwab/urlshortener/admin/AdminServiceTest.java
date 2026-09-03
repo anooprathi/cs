@@ -16,6 +16,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +26,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,16 +54,18 @@ class AdminServiceTest {
     }
 
     @Test
-    void listTenants_mapsAllTenantsToSummaries() {
+    void listTenants_mapsPageOfTenantsToSummaries() {
         Tenant a = Tenant.builder().id(1L).name("acme").plan(RateLimitPlan.STANDARD).active(true).createdAt(Instant.now()).build();
         Tenant b = Tenant.builder().id(2L).name("other").plan(RateLimitPlan.PREMIUM).active(false).createdAt(Instant.now()).build();
-        when(tenantService.listAll()).thenReturn(List.of(a, b));
+        Pageable pageable = PageRequest.of(0, 50);
+        when(tenantService.listAll(pageable)).thenReturn(new PageImpl<>(List.of(a, b), pageable, 2));
 
-        List<AdminTenantSummaryResponse> result = adminService.listTenants();
+        var result = adminService.listTenants(pageable);
 
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).name()).isEqualTo("acme");
-        assertThat(result.get(1).active()).isFalse();
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.content().get(0).name()).isEqualTo("acme");
+        assertThat(result.content().get(1).active()).isFalse();
     }
 
     @Test
@@ -124,47 +130,70 @@ class AdminServiceTest {
         when(tenantService.getTenantById(1L)).thenReturn(Tenant.builder().id(1L).name("acme").build());
         UrlMapping active = UrlMapping.builder().shortCode("abc1234").originalUrl("https://example.com").active(true).clickCount(1).createdAt(Instant.now()).build();
         UrlMapping inactive = UrlMapping.builder().shortCode("old1234").originalUrl("https://example.com/old").active(false).clickCount(9).createdAt(Instant.now()).build();
-        when(urlMappingRepository.findByTenantIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(active, inactive));
+        Pageable requested = PageRequest.of(0, 50);
+        when(urlMappingRepository.findByTenantId(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(active, inactive), requested, 2));
 
-        List<AdminUrlSummaryResponse> result = adminService.listTenantUrls(1L);
+        var result = adminService.listTenantUrls(1L, requested);
 
-        assertThat(result).hasSize(2);
-        assertThat(result).extracting(AdminUrlSummaryResponse::active).containsExactlyInAnyOrder(true, false);
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content()).extracting(AdminUrlSummaryResponse::active).containsExactlyInAnyOrder(true, false);
     }
 
     @Test
     void listTenantUrls_unknownTenant_throwsNotFound_beforeQueryingLinks() {
         when(tenantService.getTenantById(999L)).thenThrow(new TenantNotFoundException(999L));
 
-        assertThatThrownBy(() -> adminService.listTenantUrls(999L))
+        assertThatThrownBy(() -> adminService.listTenantUrls(999L, PageRequest.of(0, 50)))
                 .isInstanceOf(TenantNotFoundException.class);
     }
 
     @Test
-    void getUsageSummary_aggregatesAcrossTenants() {
+    void getUsageSummary_aggregatesAcrossTenants_andOnlyLooksUpActiveTenantIds() {
         Tenant a = Tenant.builder().id(1L).name("acme").build();
         Tenant b = Tenant.builder().id(2L).name("other").build();
-        when(tenantService.listAll()).thenReturn(List.of(a, b));
         when(usageRecordRepository.findByPeriodYearMonth("2026-08")).thenReturn(List.of(
                 TenantUsageRecord.builder().tenantId(1L).periodYearMonth("2026-08").apiCallCount(10).redirectCount(100).build(),
                 TenantUsageRecord.builder().tenantId(2L).periodYearMonth("2026-08").apiCallCount(5).redirectCount(50).build()
         ));
+        when(tenantService.findByIds(List.of(1L, 2L))).thenReturn(List.of(a, b));
 
         AdminUsageSummaryResponse summary = adminService.getUsageSummary();
 
         assertThat(summary.totalApiCalls()).isEqualTo(15L);
         assertThat(summary.totalRedirects()).isEqualTo(150L);
         assertThat(summary.byTenant()).hasSize(2);
+        // activeTenantCount is scoped to THIS PERIOD's activity (2 usage
+        // records), not "every tenant ever registered" — the bug this
+        // rename/refactor fixed.
+        assertThat(summary.activeTenantCount()).isEqualTo(2L);
+        // Bounded lookup, not tenantService.listAll(): only the two
+        // tenant ids that actually appear in this period's usage records.
+        org.mockito.Mockito.verify(tenantService).findByIds(List.of(1L, 2L));
+        org.mockito.Mockito.verify(tenantService, org.mockito.Mockito.never()).listAll();
+    }
+
+    @Test
+    void getUsageSummary_tenantDeletedSinceUsageWasRecorded_stillIncludesTheRecord() {
+        when(usageRecordRepository.findByPeriodYearMonth("2026-08")).thenReturn(List.of(
+                TenantUsageRecord.builder().tenantId(99L).periodYearMonth("2026-08").apiCallCount(1).redirectCount(1).build()
+        ));
+        when(tenantService.findByIds(List.of(99L))).thenReturn(List.of()); // tenant no longer exists
+
+        AdminUsageSummaryResponse summary = adminService.getUsageSummary();
+
+        assertThat(summary.byTenant()).hasSize(1);
+        assertThat(summary.byTenant().get(0).name()).contains("deleted tenant");
     }
 
     @Test
     void getUsageSummary_noUsageThisPeriod_returnsZeroedSummary() {
-        when(tenantService.listAll()).thenReturn(List.of());
         when(usageRecordRepository.findByPeriodYearMonth("2026-08")).thenReturn(List.of());
 
         AdminUsageSummaryResponse summary = adminService.getUsageSummary();
 
         assertThat(summary.totalApiCalls()).isZero();
+        assertThat(summary.activeTenantCount()).isZero();
         assertThat(summary.byTenant()).isEmpty();
     }
 }

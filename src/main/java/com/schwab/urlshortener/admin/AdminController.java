@@ -1,16 +1,22 @@
 package com.schwab.urlshortener.admin;
 
+import com.schwab.urlshortener.dto.PageResponse;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * Cross-tenant visibility and management, authenticated separately from
  * the tenant-facing API via X-Admin-Key (see AdminAuthenticationFilter) —
  * never a tenant's own X-API-Key, however privileged. This is a distinct
  * identity, not an elevated tenant.
+ *
+ * The two listing endpoints (tenants, a tenant's urls) are paginated —
+ * standard Spring paging query params (page, size, sort), defaulting to
+ * 50 per page. Unpaginated "return everything" was fine for a demo
+ * tenant count; it would not have held up as either list grew.
  */
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -24,8 +30,9 @@ public class AdminController {
 
     /** All tenants and their plan/status — the admin "dashboard" list. */
     @GetMapping("/tenants")
-    public ResponseEntity<List<AdminTenantSummaryResponse>> listTenants() {
-        return ResponseEntity.ok(adminService.listTenants());
+    public ResponseEntity<PageResponse<AdminTenantSummaryResponse>> listTenants(
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(adminService.listTenants(pageable));
     }
 
     /** One tenant, plus a snapshot of its current-period usage. */
@@ -52,8 +59,10 @@ public class AdminController {
 
     /** Every link a given tenant has ever created, active or not. */
     @GetMapping("/tenants/{tenantId}/urls")
-    public ResponseEntity<List<AdminUrlSummaryResponse>> listTenantUrls(@PathVariable Long tenantId) {
-        return ResponseEntity.ok(adminService.listTenantUrls(tenantId));
+    public ResponseEntity<PageResponse<AdminUrlSummaryResponse>> listTenantUrls(
+            @PathVariable Long tenantId,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(adminService.listTenantUrls(tenantId, pageable));
     }
 
     /** Platform-wide usage for the current billing period, broken down by tenant. */

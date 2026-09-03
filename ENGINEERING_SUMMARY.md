@@ -459,3 +459,41 @@ Boot 4 attempt) — state the boundary, don't paper over it.
 whether it can sit on the classpath without a live Redis reachable (when `app.rate-limit.backend` stays at
 its default of `local`) without blocking application startup is reasoned about from general knowledge of
 Spring Data Redis's lazy-connection behavior, not confirmed by running it.
+
+## 13. Addendum — Code Review Fixes
+
+Requested explicitly, following a self-review that produced seven concrete findings (not hypothetical —
+each cited the specific class and line). All seven addressed:
+
+1. **`AdminUsageSummaryResponse.totalTenants` had ambiguous, actually-wrong semantics** — named as if it were
+   scoped to the period-scoped `byTenant` breakdown, but computed from every tenant ever registered. Renamed
+   to `activeTenantCount`, recomputed from `records.size()` so the name and the value now agree.
+2. **`AdminService.getUsageSummary()` loaded every registered tenant** just to build a name-lookup map for
+   the response. Replaced with `TenantService.findByIds()` scoped to only the tenant ids present in that
+   period's usage records — bounded by actual activity, not total tenant count.
+3. **`RateLimitFilter` built a new `Counter` on every rejected request** instead of caching it. Replaced with
+   an `EnumMap<RateLimitPlan, Counter>` pre-registered once in the constructor — one consistent
+   metric-caching pattern across the codebase instead of two.
+4. **Package cohesion**: `NoOpUrlSafetyChecker`/`FeignUrlSafetyChecker` and `RandomBase62ShortCodeGenerator`
+   lived in `service.impl` alongside the actual URL-shortening domain classes, grouped only by the
+   mechanical "-Impl" naming convention rather than by what they actually do. Moved to `service.safety` and
+   `service.shortcode` respectively (via `git mv`, preserving history) — `service.impl` now holds exactly
+   the URL-shortener's own implementation classes.
+5. **No pagination on `GET /admin/tenants` or `GET /admin/tenants/{id}/urls`** — both returned their entire
+   result set unbounded. Added a generic `PageResponse<T>` (a stable, Spring-Data-independent wire shape,
+   not `Page<T>` returned directly) and standard `Pageable` query params, defaulting to 50 per page.
+6. Same root cause as #2 — addressed together.
+7. **Test hygiene**: `UrlShortenerIntegrationTest`/`AdminIntegrationTest`'s `@BeforeEach` cleared URL mappings
+   and tenants but not usage records or invoices, letting rows tied to earlier (deleted) tenants quietly
+   accumulate across a test class's shared H2 instance. Added `TenantUsageRecordRepository`/
+   `InvoiceRepository` to the cleanup, in FK-safe order (leaf tables before the tenants they reference).
+
+All seven were genuine findings from re-reading the actual code, not restated boilerplate — #1 in
+particular was a real semantic bug (a field silently meaning something different from what its name and
+position implied), not a style preference. Tests were updated alongside each fix (`AdminServiceTest`,
+`AdminIntegrationTest`), not left to bit-rot against the new signatures.
+
+Not fixed, and not silently dropped either: the `GlobalExceptionHandler`/`ExpiredUrlCleanupService`
+coverage gaps identified in the same review remain open — they're genuine test-coverage debt, not bugs,
+and were correctly scoped as "flag, don't necessarily fix on this pass" when first raised. Worth returning
+to.

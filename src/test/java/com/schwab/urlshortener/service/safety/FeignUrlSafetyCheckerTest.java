@@ -1,4 +1,4 @@
-package com.schwab.urlshortener.service.impl;
+package com.schwab.urlshortener.service.safety;
 
 import com.schwab.urlshortener.client.UrlSafetyClient;
 import org.junit.jupiter.api.Test;
