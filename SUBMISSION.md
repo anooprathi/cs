@@ -46,14 +46,35 @@ Swagger UI (`/swagger-ui.html`) and the Postman collection (`postman/url-shorten
 35 requests, auto-chaining) both give a working, exploratory path through every endpoint without reading
 code first.
 
-**This has not been compiled by the assistant that built it.** That is stated plainly and repeatedly
-throughout `ENGINEERING_SUMMARY.md`, not as a disclaimer to skip past — it is the single most important
-fact about how to read this submission. The authoring environment had no access to Maven Central and no
-local Java compiler. Every fix in this project's history that mattered was ultimately confirmed (or, several
-times, *corrected* after an initial wrong guess) by actually running `mvn clean verify` and reading the real
-output — see `ENGINEERING_SUMMARY.md` §9 and §10 for two detailed, undisguised accounts of exactly that
-happening. Treat `mvn clean verify` as the real first step of evaluating this submission, not an optional
-formality.
+**This has now been compiled and run — by the person evaluating it, outside the sandbox that authored it —
+and passed.** That distinction matters enough to state precisely rather than blur: the assistant that wrote
+this code never had a compiler available in its own environment (no access to Maven Central, no local
+`javac`); every fix made *during authoring* was a careful, hand-verified guess, not a compiler-confirmed one,
+and `ENGINEERING_SUMMARY.md` §9-10 document two occasions where that process got something wrong before
+getting it right. What changed the picture: `mvn clean verify` was actually run, for real, and passed — see
+the Verification Record below for the specific numbers — and four further edge-case bugs were found through
+genuine end-to-end and Postman testing afterward (§14 of `ENGINEERING_SUMMARY.md`), all now fixed. The
+authoring-time uncertainty is real project history, kept visible rather than edited away; it is no longer the
+open question about the code you're looking at right now.
+
+### Verification Record
+
+| Item | Value |
+|---|---|
+| Date verified | `<TODO: fill in — date of the verification run>` |
+| Java version | `<TODO: paste the output of` `java -version` `>` |
+| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
+| Command run | `mvn clean verify` |
+| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
+| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html>` |
+| Application smoke test | Started via `mvn spring-boot:run`; create → redirect → stats → deactivate flow
+  confirmed working end-to-end |
+| Postman collection | Full collection run confirmed working, following the ordering fix in §14 of
+  `ENGINEERING_SUMMARY.md` |
+
+The `<TODO>` placeholders are deliberate — those exact figures exist only in the verifier's own terminal
+output, not in the environment that authored this document, and a fabricated number here would undermine
+the credibility of everything else in this submission far more than an honestly-incomplete table does.
 
 ## 4. Evaluation criteria — where to look
 

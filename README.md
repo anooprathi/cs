@@ -64,10 +64,13 @@ url-shortener/
 - Maven 3.9+
 - Internet access to Maven Central (dependencies are **not** vendored)
 
-> **Verification caveat:** this project was authored in a sandboxed environment with no access to Maven
-> Central and no local JDK compiler, so it could not be `mvn`-built or executed there. Every file was
-> hand-reviewed for compilation correctness, but **please run `mvn clean verify` locally** before treating it
-> as done — see `ENGINEERING_SUMMARY.md` §5 for the full limitations list.
+> **Verification record:** this project was authored in a sandboxed environment with no access to Maven
+> Central and no local JDK compiler, so it could not be `mvn`-built during authoring — every file was
+> hand-reviewed for compilation correctness at the time, not compiler-verified. It has since been
+> **independently built and run outside that sandbox**, and multiple real issues found in that process were
+> fixed and are reflected in the current code (see `ENGINEERING_SUMMARY.md` §9-14 for the full account,
+> including several genuine bugs this caught that a hand review alone had missed). See §9 below for the
+> specific verification record — Java/Maven versions, the exact command run, test results, and coverage.
 
 ### Build
 ```bash
@@ -479,7 +482,31 @@ genuinely requires infrastructure outside this repository for true multi-DC oper
   multi-instance/multi-DC operation, since local buckets let a tenant's effective limit multiply by instance
   count. The app was already stateless otherwise (no server-side sessions).
 
-## 9. Known Limitations / Trade-offs
+## 9. Verification Record
+
+This project has been independently built and run **outside** the authoring sandbox — the "not compiled"
+caveat that applied throughout most of this project's history no longer applies to the current codebase.
+Four real bugs (§13-14 of `ENGINEERING_SUMMARY.md`) were found this way and are already fixed in the code
+you're looking at.
+
+| Item | Value |
+|---|---|
+| Date verified | `<TODO: fill in — date of the verification run>` |
+| Java version | `<TODO: paste the output of` `java -version` `>` |
+| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
+| Command run | `mvn clean verify` |
+| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
+| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html>` |
+| Application smoke test | Started via `mvn spring-boot:run`; create → redirect → stats → deactivate flow
+  confirmed working end-to-end |
+| Postman collection | Full collection run confirmed working, following the reordering fix in §13 of
+  `ENGINEERING_SUMMARY.md` (the deactivate step previously ran before the redirect tests it would have broken) |
+
+The four `<TODO>` rows above need the literal values from that verification run substituted in — placeholders
+were left rather than invented numbers, since a fabricated test count or coverage percentage here would be a
+worse integrity failure than an honestly-incomplete table.
+
+## 10. Known Limitations / Trade-offs
 
 See `ENGINEERING_SUMMARY.md` §5 for the full list. Highlights:
 - Rate-limit buckets default to single-node/in-process (`app.rate-limit.backend=local`) — switch to
@@ -494,3 +521,6 @@ See `ENGINEERING_SUMMARY.md` §5 for the full list. Highlights:
   routing, secrets distribution) this codebase cannot itself provide — see ARCHITECTURE.md §7.4 for exactly
   where that line sits.
 - Still on Spring Boot 3.3.4 — see §7 above for why a Boot 4 upgrade was attempted and reverted.
+- `GlobalExceptionHandler`'s handlers for `RateLimitExceededException`/`MethodArgumentTypeMismatchException`,
+  and `ExpiredUrlCleanupService` entirely, have no direct test coverage — flagged in a code review pass and
+  correctly scoped as "flag, not necessarily fix" (see `ENGINEERING_SUMMARY.md` §13), still open.

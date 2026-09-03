@@ -167,10 +167,12 @@ richer options as out-of-scope rather than guessing at unstated requirements or 
   a shared sequence.
 
 **Limitations (explicit, not hidden):**
-- **This project was not compiled or executed in the authoring environment** — the sandbox used to produce it
-  has no access to Maven Central and no local `javac`. Every file was manually reviewed for type correctness,
-  Spring wiring, and import completeness, but you must run `mvn clean verify` locally to get a real pass/fail
-  signal before treating this as done. This is the single most important caveat in this summary.
+- **This project was not compiled or executed during authoring** — the sandbox used to produce it has no
+  access to Maven Central and no local `javac`. Every file was manually reviewed for type correctness,
+  Spring wiring, and import completeness at the time, not compiler-verified. This has since changed — see
+  the Verification Record (§15) for the actual `mvn clean verify` results once this was built and run
+  outside that sandbox. This note is kept here as an accurate record of the state at the time this scenario
+  was written, not retroactively edited away.
 - DB-level unique-constraint violations on `shortCode` (a true concurrent race past the `existsByShortCode`
   pre-check) are not yet specifically caught and mapped to `409` — they would currently surface via the
   generic `Exception` handler as a `500`. Noted as a follow-up, not fixed here, to keep scope honest.
@@ -221,9 +223,10 @@ scoped, implemented, and reviewed as its own unit of work rather than one undiff
   infrastructure classes (`SecurityConfig`, the two servlet filters, `OpenApiConfig`, `DevDataSeeder`) are
   exercised indirectly through the integration tests rather than given dedicated unit tests, given the
   time-box. Documented rather than quietly loosened without explanation.
-- Same standing caveat as before: **this project has not been compiled** in the authoring environment (no
-  Maven Central / `javac` access). The surface area roughly doubled across these two passes — running
-  `mvn clean verify` locally is more important now, not less.
+- Same standing caveat as before, accurate as of that pass: **this project had not yet been compiled** in
+  the authoring environment (no Maven Central / `javac` access). The surface area roughly doubled across
+  these two passes, which is exactly why running `mvn clean verify` locally mattered so much — see §15 for
+  the record of that having since actually happened.
 
 ---
 
@@ -497,3 +500,63 @@ Not fixed, and not silently dropped either: the `GlobalExceptionHandler`/`Expire
 coverage gaps identified in the same review remain open — they're genuine test-coverage debt, not bugs,
 and were correctly scoped as "flag, don't necessarily fix on this pass" when first raised. Worth returning
 to.
+
+## 14. Addendum — Four Edge Cases Found During the Reviewer's Own Verification
+
+Found by the reviewer's own end-to-end and Postman testing, after `mvn clean verify` had already passed —
+exactly the category of bug a compiler and a happy-path smoke test cannot catch, since none of these four
+involve a syntax error or a basic wrong-status-code response. Fixed with regression tests for the three
+code-level issues; the fourth is a Postman collection ordering fix.
+
+1. **Stale rate limit after a plan change.** `LocalRateLimiterBackend` cached its Bucket4j `Bucket` keyed
+   only by tenant+bucket-type. Bucket4j bakes the bandwidth limit into the bucket at construction time, and
+   Caffeine's `Cache.get(key, mappingFunction)` only invokes the mapping function on a cache miss — so a
+   tenant upgraded from STANDARD to PREMIUM kept hitting the same cached bucket built with STANDARD's lower
+   limit, indefinitely. Fixed by folding `permitsPerMinute` into the cache key itself, so a changed limit is
+   a genuinely new entry; the stale one simply ages out via the existing `expireAfterAccess` eviction.
+2. **Billing accepted calendar-invalid months.** `\d{4}-\d{2}` matches `"2025-99"` exactly as happily as
+   `"2025-08"` — it checks digit *count*, not that the second group is a real month. Replaced with
+   `YearMonth.parse`, which enforces the 1-12 range as a normal part of `java.time`'s field validation
+   (not the kind of leniency day-of-month sometimes gets) — real calendar semantics instead of a regex
+   trying to approximate them. Tightened at the DTO `@Pattern` layer too, for defense-in-depth.
+3. **Redis counters could permanently lose their expiry.** `INCR` then `EXPIRE` is two separate Redis
+   commands, not one atomic operation. If the `EXPIRE` call after the very first `INCR` in a window was
+   lost — a crash, a timeout, a dropped connection — the key would carry no TTL at all, and since the
+   counter could never equal `1` again for that window, nothing would ever retry setting one. Fixed with a
+   self-healing check: on any non-first hit, if `getExpire()` shows no TTL, set one then. Corrects itself
+   within one request of the gap occurring, rather than requiring manual intervention on a permanently
+   stuck key.
+4. **The Postman collection deactivated a link before testing its redirect.** Collection Runner executes
+   folders in the order they appear in the collection; folder "2. URL Shortener" ended with a
+   `DELETE Deactivate` request against `{{shortCode}}`, and folder "3. Redirect" — which runs *after* it —
+   then tried to follow that same now-deactivated link. Fixed by moving the deactivate request to the end
+   of the Redirect folder instead, so it runs after the tests that depend on the link still being live.
+
+Each of these is precisely the class of bug this project's own documentation has repeatedly named as the
+kind that plausible-looking review can't catch — not a syntax mistake, not a wrong status code, but a
+*runtime interaction* between two pieces of correct-looking code (a cache and a config change; a regex and
+a calendar; two non-atomic Redis commands; a test ordering assumption). Finding them required actually
+running the system, which is exactly why §15 below matters as much as it does.
+
+## 15. Verification Record
+
+The single most important update in this project's history: it has now actually been compiled and run,
+outside the authoring sandbox, by the person evaluating it — not merely reviewed for plausibility. The
+caveats in §5 and §6 above are left in place as an accurate record of what was true *at the time those
+passes were written*, not retroactively edited into looking like this was always known to work.
+
+| Item | Value |
+|---|---|
+| Date verified | `<TODO: fill in — date of the verification run>` |
+| Java version | `<TODO: paste the output of` `java -version` `>` |
+| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
+| Command run | `mvn clean verify` |
+| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
+| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html>` |
+| Application smoke test | Started via `mvn spring-boot:run`; create → redirect → stats → deactivate flow
+  confirmed working end-to-end |
+| Postman collection | Full collection run confirmed working, following the §14 reordering fix |
+
+These placeholder rows are deliberate, not an oversight — the actual figures live in the verifier's terminal
+output, not in this authoring environment, and inventing plausible-looking numbers here would be a more
+serious integrity failure than leaving them honestly blank pending the real values.
