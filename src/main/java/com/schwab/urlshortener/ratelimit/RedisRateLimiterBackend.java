@@ -66,12 +66,29 @@ public class RedisRateLimiterBackend implements RateLimiterBackend {
                 return allowedResult(permitsPerMinute);
             }
             if (count == 1L) {
-                // First hit in a new window — start its TTL now. A crash or
-                // race between INCR and this EXPIRE call would leave the key
-                // without a TTL (never resets) rather than resetting too
-                // early, so the failure mode leans "too strict briefly," not
-                // "limit silently stops being enforced."
+                // First hit in a new window — start its TTL now.
                 redisTemplate.expire(redisKey, WINDOW);
+            } else {
+                // Self-healing check for the non-atomic INCR-then-EXPIRE
+                // gap: if a PRIOR request's count==1 branch above ran the
+                // INCR but then crashed, timed out, or lost the connection
+                // before its EXPIRE call landed, this key would carry no
+                // TTL at all — meaning it would never reset and would
+                // permanently rate-limit whoever it belongs to, since every
+                // future request just keeps incrementing a counter that can
+                // never again equal 1. getExpire() returns -1 for "key
+                // exists but has no TTL" (-2 would mean the key doesn't
+                // exist, which shouldn't happen here since we just
+                // incremented it) — either non-positive result means this
+                // key needs its TTL set now. One extra cheap Redis read on
+                // the non-first hit in a window; self-corrects within one
+                // request of the gap occurring, rather than leaving a
+                // permanently-stuck key to require manual intervention.
+                Long ttl = redisTemplate.getExpire(redisKey);
+                if (ttl == null || ttl < 0) {
+                    log.warn("Redis key {} was missing its TTL (a prior INCR's EXPIRE call was lost) — repairing now", redisKey);
+                    redisTemplate.expire(redisKey, WINDOW);
+                }
             }
 
             boolean allowed = count <= permitsPerMinute;

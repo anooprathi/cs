@@ -110,6 +110,25 @@ class InvoiceServiceTest {
     }
 
     @Test
+    void generateInvoice_structurallyValidButInvalidMonth_isRejected() {
+        // Regression test: "2025-99" matches the shape "\\d{4}-\\d{2}" just
+        // as happily as "2025-08" does — four digits, a dash, two digits —
+        // but 99 isn't a real month. The old regex-only check let this
+        // straight through; validation must actually understand calendar
+        // months, not just count digits.
+        assertThatThrownBy(() -> invoiceService.generateInvoice(1L, RateLimitPlan.STANDARD, "2025-99"))
+                .isInstanceOf(InvalidBillingPeriodException.class);
+
+        assertThatThrownBy(() -> invoiceService.generateInvoice(1L, RateLimitPlan.STANDARD, "2025-00"))
+                .as("month 00 is equally not a real month, same bug class as 99")
+                .isInstanceOf(InvalidBillingPeriodException.class);
+
+        assertThatThrownBy(() -> invoiceService.generateInvoice(1L, RateLimitPlan.STANDARD, "2025-13"))
+                .as("one past the real range (1-12) — the classic off-by-one case for this kind of bug")
+                .isInstanceOf(InvalidBillingPeriodException.class);
+    }
+
+    @Test
     void generateInvoice_alreadyExistsForPeriod_throwsDuplicateConflict() {
         Invoice existing = Invoice.builder()
                 .id(5L).invoiceNumber("INV-2026-08-000001").tenantId(1L).billingPeriod("2026-08")

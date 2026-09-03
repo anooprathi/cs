@@ -85,13 +85,35 @@ public class InvoiceService {
                 .orElseThrow(() -> new InvoiceNotFoundException(invoiceId));
     }
 
+    /**
+     * "yyyy-MM" strings compare lexicographically in the same order as
+     * chronologically, since the format is fixed-width and zero-padded —
+     * used below for the future-period check without needing to parse a
+     * real date for that comparison.
+     *
+     * The format itself DOES need real calendar validation, not just a
+     * structural regex: "\\d{4}-\\d{2}" matches "2025-99" just as happily
+     * as "2025-08" — four digits, a dash, two digits, with no concept of
+     * "and the second group must be a valid month 01-12". YearMonth.parse
+     * enforces that as a normal part of java.time's field-range validation
+     * (MONTH_OF_YEAR strictly rejects values outside 1-12 regardless of
+     * resolver style — this isn't the kind of leniency day-of-month
+     * sometimes gets), so it does both the format AND the range check in
+     * one place instead of a hand-rolled regex trying to encode calendar
+     * rules a regex isn't well suited to expressing.
+     */
+    private static final java.time.format.DateTimeFormatter PERIOD_FORMATTER = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM");
+
     private void validatePeriod(String period) {
-        if (period == null || !period.matches("\\d{4}-\\d{2}")) {
-            throw new InvalidBillingPeriodException("billingPeriod must be in yyyy-MM format: " + period);
+        if (period == null) {
+            throw new InvalidBillingPeriodException("billingPeriod must be in yyyy-MM format: null");
         }
-        // "yyyy-MM" strings compare lexicographically in the same order as
-        // chronologically, since the format is fixed-width and zero-padded —
-        // no date parsing needed to check "is this in the future".
+        try {
+            java.time.YearMonth.parse(period, PERIOD_FORMATTER);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new InvalidBillingPeriodException("billingPeriod must be a valid yyyy-MM month: " + period);
+        }
+
         String current = usageMeteringService.currentPeriod();
         if (period.compareTo(current) > 0) {
             throw new InvalidBillingPeriodException("Cannot generate an invoice for a future period: " + period);

@@ -319,42 +319,6 @@
               ]
             }
           }
-        },
-        {
-          "name": "DELETE Deactivate",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "X-API-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "urls",
-                "{{shortCode}}"
-              ]
-            },
-            "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one."
-          }
         }
       ]
     },
@@ -393,6 +357,43 @@
               ]
             }
           }
+        },
+        {
+          "name": "DELETE Deactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}"
+              ]
+            },
+            "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one. Deliberately positioned as the LAST request in this folder (moved here from \"2. URL Shortener\"): running Collection Runner top-to-bottom means folders execute in order, and this request deactivates {{shortCode}} \u2014 if it ran before the redirect tests above (its original position), both \"GET Redirect by shortCode\" and any other test still relying on {{shortCode}} being active would 404 unexpectedly."
+          },
+          "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one. Deliberately positioned as the LAST request in this folder (moved here from \"2. URL Shortener\"): running Collection Runner top-to-bottom means folders execute in order, and this request deactivates {{shortCode}} \u2014 if it ran before the redirect tests above (its original position), both \"GET Redirect by shortCode\" and any other test still relying on {{shortCode}} being active would 404 unexpectedly."
         }
       ]
     },
@@ -610,8 +611,10 @@
                 "admin",
                 "tenants"
               ]
-            }
-          }
+            },
+            "description": ""
+          },
+          "description": "Paginated \u2014 response shape is {content, page, size, totalElements, totalPages}. Add ?page=0&size=20&sort=name,asc as needed."
         },
         {
           "name": "GET Tenant Detail",

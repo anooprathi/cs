@@ -101,4 +101,32 @@ class TenantRateLimiterServiceTest {
             assertThat(rateLimiterService.tryConsumeApiPermit(premiumTenant, RateLimitPlan.PREMIUM).allowed()).isTrue();
         }
     }
+
+    @Test
+    void planUpgradeMidSession_immediatelyGetsTheNewLimit_notStuckOnTheOldOne() {
+        // Regression test: LocalRateLimiterBackend used to cache a Bucket4j
+        // Bucket keyed only by bucketKey, and Bucket4j bakes its bandwidth
+        // limit in at construction time. A tenant upgraded from STANDARD to
+        // PREMIUM mid-session would keep hitting the SAME cached bucket
+        // built with STANDARD's lower limit, since the cache key never
+        // changed even though the caller now passes PREMIUM's higher one.
+        Long tenantId = 20L;
+
+        // Exhaust the STANDARD bucket completely.
+        for (int i = 0; i < STANDARD_API_PERMITS; i++) {
+            rateLimiterService.tryConsumeApiPermit(tenantId, RateLimitPlan.STANDARD);
+        }
+        assertThat(rateLimiterService.tryConsumeApiPermit(tenantId, RateLimitPlan.STANDARD).allowed())
+                .as("sanity check: the STANDARD bucket really is exhausted before the 'upgrade'")
+                .isFalse();
+
+        // Simulate an admin plan upgrade: the very next call for the SAME
+        // tenant id now arrives with RateLimitPlan.PREMIUM instead.
+        RateLimitResult afterUpgrade = rateLimiterService.tryConsumeApiPermit(tenantId, RateLimitPlan.PREMIUM);
+
+        assertThat(afterUpgrade.allowed())
+                .as("an upgraded tenant must not stay stuck behind their old plan's exhausted bucket")
+                .isTrue();
+        assertThat(afterUpgrade.limitPerMinute()).isEqualTo(PREMIUM_API_PERMITS);
+    }
 }

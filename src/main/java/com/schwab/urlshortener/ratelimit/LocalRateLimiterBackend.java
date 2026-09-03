@@ -39,11 +39,24 @@ public class LocalRateLimiterBackend implements RateLimiterBackend {
 
     @Override
     public RateLimitResult tryConsume(String bucketKey, long permitsPerMinute) {
-        Bucket bucket = buckets.get(bucketKey, key -> newBucket(permitsPerMinute));
+        // Cache key includes the limit itself, not just the bucket identity:
+        // Bucket4j's Bucket bakes its Bandwidth (the configured limit) in at
+        // construction time and doesn't expose a way to change it later.
+        // Caffeine's Cache.get(key, mappingFunction) only invokes the
+        // mapping function on a miss — with a bare bucketKey, a tenant
+        // upgraded from STANDARD to PREMIUM mid-session would keep hitting
+        // the SAME cached Bucket built with the old, lower limit forever,
+        // since the key never changed even though the desired limit did.
+        // Qualifying the key with permitsPerMinute makes a changed plan
+        // look like a genuinely new cache entry, so it gets a fresh bucket
+        // sized correctly — the old entry simply ages out via
+        // expireAfterAccess instead of leaking indefinitely.
+        String cacheKey = bucketKey + ":" + permitsPerMinute;
+        Bucket bucket = buckets.get(cacheKey, key -> newBucket(permitsPerMinute));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         long retryAfterSeconds = probe.isConsumed() ? 0 : Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000);
         if (!probe.isConsumed()) {
-            log.warn("Rate limit exceeded for bucket={}, retryAfterSeconds={}", bucketKey, retryAfterSeconds);
+            log.warn("Rate limit exceeded for bucket={}, retryAfterSeconds={}", cacheKey, retryAfterSeconds);
         }
         return new RateLimitResult(probe.isConsumed(), probe.getRemainingTokens(), permitsPerMinute, retryAfterSeconds);
     }
