@@ -39,6 +39,21 @@
       "key": "adminKey",
       "value": "admin-dev-only-key-change-me",
       "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantId2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rateLimitObserved",
+      "value": "false",
+      "type": "string"
     }
   ],
   "item": [
@@ -56,7 +71,8 @@
                   "pm.test('status is 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.collectionVariables.set('apiKey', body.apiKey);",
-                  "console.log('Saved apiKey:', body.apiKey);"
+                  "pm.collectionVariables.set('tenantId', String(body.tenantId));",
+                  "console.log('Saved apiKey and tenantId:', body.apiKey, body.tenantId);"
                 ]
               }
             }
@@ -98,7 +114,8 @@
                   "pm.test('status is 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.collectionVariables.set('apiKey2', body.apiKey);",
-                  "console.log('Saved apiKey2:', body.apiKey);"
+                  "pm.collectionVariables.set('tenantId2', String(body.tenantId));",
+                  "console.log('Saved apiKey2 and tenantId2:', body.apiKey, body.tenantId);"
                 ]
               }
             }
@@ -156,7 +173,22 @@
                 "me"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('plan is STANDARD (as registered in Setup)', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.plan).to.eql('STANDARD');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -238,7 +270,22 @@
                 "urls"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('shortCode equals the custom alias requested', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.shortCode).to.eql(pm.collectionVariables.get('customAlias'));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "POST Create with Expiry",
@@ -269,7 +316,22 @@
                 "urls"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('expiresAt is present in the response', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.expiresAt).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET Details",
@@ -293,10 +355,25 @@
                 "{{shortCode}}"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('originalUrl matches what was created', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.originalUrl).to.eql('https://www.schwab.com/research');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "GET Stats",
+          "name": "GET Stats (before any redirect \u2014 baseline)",
           "request": {
             "method": "GET",
             "header": [
@@ -318,7 +395,22 @@
                 "stats"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('clickCount is 0 before any redirect has happened', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.clickCount).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -340,6 +432,64 @@
               ]
             },
             "description": "Postman follows redirects by default (302 -> Location). Check the 'Location' response header, or disable 'Automatically follow redirects' in Settings to see the raw 302."
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 302 (raw redirect, not followed)', () => pm.response.to.have.status(302));",
+                  "pm.test('Location header points to the original URL', () => {",
+                  "    pm.expect(pm.response.headers.get('Location')).to.eql('https://www.schwab.com/research');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Stats After Redirect (confirms clickCount incremented)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('clickCount reflects the one redirect that just happened', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.clickCount).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{shortCode}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{shortCode}}",
+                "stats"
+              ]
+            },
+            "description": "Run immediately after 'GET Redirect by shortCode' above \u2014 this is the actual proof that a redirect increments the click count, not just that the stats endpoint returns 200."
           }
         },
         {
@@ -356,7 +506,24 @@
                 "{{customAlias}}"
               ]
             }
-          }
+          },
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 302 (raw redirect, not followed)', () => pm.response.to.have.status(302));",
+                  "pm.test('Location header points to the original URL', () => {",
+                  "    pm.expect(pm.response.headers.get('Location')).to.eql('https://www.schwab.com/pricing');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "DELETE Deactivate",
@@ -394,6 +561,39 @@
             "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one. Deliberately positioned as the LAST request in this folder (moved here from \"2. URL Shortener\"): running Collection Runner top-to-bottom means folders execute in order, and this request deactivates {{shortCode}} \u2014 if it ran before the redirect tests above (its original position), both \"GET Redirect by shortCode\" and any other test still relying on {{shortCode}} being active would 404 unexpectedly."
           },
           "description": "Run this LAST in this folder \u2014 it deactivates {{shortCode}}, so re-running the GET requests above afterward will 404. Re-run 'POST Create Short URL' to get a fresh one. Deliberately positioned as the LAST request in this folder (moved here from \"2. URL Shortener\"): running Collection Runner top-to-bottom means folders execute in order, and this request deactivates {{shortCode}} \u2014 if it ran before the redirect tests above (its original position), both \"GET Redirect by shortCode\" and any other test still relying on {{shortCode}} being active would 404 unexpectedly."
+        },
+        {
+          "name": "GET Redirect After Deactivate (confirms it's actually gone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deactivated link now 404s, not just returns 204 on delete', () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{shortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{shortCode}}"
+              ]
+            },
+            "description": "The actual proof of deactivation behavior \u2014 DELETE returning 204 only proves the request was accepted, not that the link stopped working. This confirms it."
+          }
         }
       ]
     },
@@ -423,7 +623,23 @@
                 "billing"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('usage counters are present and numeric', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.apiCallsUsed).to.be.a('number');",
+                  "    pm.expect(body.redirectsUsed).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -504,7 +720,20 @@
                 "invoices"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201 (first time generating for this period) or 409 (already generated by a prior run)', () => {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET List Invoices",
@@ -529,7 +758,22 @@
                 "invoices"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('at least one invoice exists (generated earlier in this folder)', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET One Invoice",
@@ -555,7 +799,22 @@
                 "{{invoiceId}}"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returned invoice matches the requested id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(String(body.invoiceId)).to.eql(pm.collectionVariables.get('invoiceId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET Download Invoice PDF",
@@ -583,7 +842,22 @@
               ]
             },
             "description": "Postman renders PDF responses in the 'Preview' pane of the response viewer, or use 'Save Response > Save to a file'."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is a real PDF (Content-Type + %PDF magic bytes)', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "    pm.expect(pm.response.text().substring(0, 4)).to.eql('%PDF');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -614,7 +888,24 @@
             },
             "description": ""
           },
-          "description": "Paginated \u2014 response shape is {content, page, size, totalElements, totalPages}. Add ?page=0&size=20&sort=name,asc as needed."
+          "description": "Paginated \u2014 response shape is {content, page, size, totalElements, totalPages}. Add ?page=0&size=20&sort=name,asc as needed.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is paginated (content/totalElements present)', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('content');",
+                  "    pm.expect(body).to.have.property('totalElements');",
+                  "    pm.expect(body.totalElements).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET Tenant Detail",
@@ -627,7 +918,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tenants/1",
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -636,11 +927,26 @@
                 "v1",
                 "admin",
                 "tenants",
-                "1"
+                "{{tenantId}}"
               ]
             },
             "description": "Replace 1 with a real tenantId from the list above (e.g. the tenantId returned by 0. Setup > Register Tenant)."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('tenantId matches the one we registered', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(String(body.tenantId)).to.eql(pm.collectionVariables.get('tenantId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "PATCH Update Tenant Plan",
@@ -661,7 +967,7 @@
               "raw": "{\n  \"plan\": \"PREMIUM\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/plan",
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}/plan",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -670,10 +976,76 @@
                 "v1",
                 "admin",
                 "tenants",
-                "1",
+                "{{tenantId}}",
                 "plan"
               ]
+            },
+            "description": " Followed immediately by 'PATCH Revert Tenant Plan to STANDARD' \u2014 leaving this tenant on PREMIUM would silently invalidate the rate-limit test in '7. Error Cases' (its '~20/min, 25 iterations' assumption is specifically about the STANDARD plan; PREMIUM's higher limit would mean 25 iterations never triggers a 429, and that test is now written to FAIL loudly in exactly that situation)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('plan actually changed to PREMIUM', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.plan).to.eql('PREMIUM');",
+                  "});"
+                ]
+              }
             }
+          ]
+        },
+        {
+          "name": "PATCH Revert Tenant Plan to STANDARD (cleanup \u2014 undoes the upgrade above)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('plan is back to STANDARD', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.plan).to.eql('STANDARD');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"STANDARD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}/plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId}}",
+                "plan"
+              ]
+            },
+            "description": "Restores STANDARD so downstream tests (especially the rate-limit test in '7. Error Cases', which assumes the 20/min STANDARD limit) see the plan they expect."
           }
         },
         {
@@ -695,7 +1067,7 @@
               "raw": "{\n  \"active\": false\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/status",
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}/status",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -704,11 +1076,76 @@
                 "v1",
                 "admin",
                 "tenants",
-                "1",
+                "{{tenantId}}",
                 "status"
               ]
             },
-            "description": "Blocks that tenant's API key immediately. Run PATCH with {\"active\": true} to reinstate."
+            "description": "Blocks that tenant's API key immediately. Run PATCH with {\"active\": true} to reinstate. Followed immediately by 'PATCH Reinstate Tenant' \u2014 leaving this tenant suspended would break every downstream request in this collection that still uses {{apiKey}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('tenant is now inactive', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.active).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Reinstate Tenant (cleanup \u2014 undoes the suspend above)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('tenant is active again', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.active).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId}}",
+                "status"
+              ]
+            },
+            "description": "Restores the tenant suspended by the previous request \u2014 without this, {{apiKey}} would 401 on every request for the rest of the collection (including the rate-limit test in '7. Error Cases', which specifically needs a working key)."
           }
         },
         {
@@ -722,7 +1159,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tenants/1/urls",
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId}}/urls",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -731,11 +1168,26 @@
                 "v1",
                 "admin",
                 "tenants",
-                "1",
+                "{{tenantId}}",
                 "urls"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is paginated', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('content');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "GET Platform Usage Summary",
@@ -759,7 +1211,23 @@
                 "usage"
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('activeTenantCount and totals are present', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('activeTenantCount');",
+                  "    pm.expect(body).to.have.property('totalApiCalls');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "401 - No Admin Key",
@@ -1152,14 +1620,44 @@
           "name": "429 - Rate Limit (run via Collection Runner, ~25 iterations)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Reset the observed flag on the first iteration of a Runner pass,",
+                  "// so a leftover 'true' from a previous run can't hide a real failure now.",
+                  "if (pm.info.iteration === 0) {",
+                  "    pm.collectionVariables.set('rateLimitObserved', 'false');",
+                  "}"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "console.log('status:', pm.response.code, '| X-RateLimit-Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "console.log('iteration', pm.info.iteration, '| status:', pm.response.code, '| X-RateLimit-Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "",
                   "if (pm.response.code === 429) {",
+                  "    pm.collectionVariables.set('rateLimitObserved', 'true');",
                   "    pm.test('rate limited as expected', () => pm.response.to.have.status(429));",
                   "    console.log('Retry-After:', pm.response.headers.get('Retry-After'));",
+                  "} else {",
+                  "    pm.test('status is 200 while still under the limit', () => pm.response.to.have.status(200));",
+                  "}",
+                  "",
+                  "// The actual fix for the silent-pass problem: previously, the ONLY",
+                  "// pm.test() call was inside the 429 branch above, so if the burst never",
+                  "// actually tripped the limiter across all iterations, ZERO assertions",
+                  "// ever ran and Collection Runner reported a clean 'nothing failed' \u2014",
+                  "// which looks identical to a real pass. This final-iteration check makes",
+                  "// 'the limiter was never actually observed to trigger' a real, visible",
+                  "// failure instead of silence.",
+                  "if (pm.info.iteration === pm.info.iterationCount - 1) {",
+                  "    pm.test('rate limit was actually triggered at least once during this run (set Iterations high enough - >20 for STANDARD)', () => {",
+                  "        pm.expect(pm.collectionVariables.get('rateLimitObserved')).to.eql('true');",
+                  "    });",
                   "}"
                 ]
               }
@@ -1185,7 +1683,7 @@
                 "me"
               ]
             },
-            "description": "A single hit returns 200 with X-RateLimit-* headers. To actually trip the STANDARD-plan limit (default 20/min), select just this request in Collection Runner and set Iterations to 25 \u2014 you'll see 200s flip to 429s partway through. Run the same against apiKey2 afterward to confirm the other tenant is unaffected."
+            "description": "A single hit returns 200 with X-RateLimit-* headers. To actually trip the STANDARD-plan limit (default 20/min), select just this request in Collection Runner and set Iterations to 25 or more \u2014 you'll see 200s flip to 429s partway through. The final iteration's test FAILS if a 429 was never observed across the whole run, so an Iterations count set too low (or a misconfigured limit) shows up as a real failure, not a silent all-green pass. Run the same against apiKey2 afterward to confirm the other tenant is unaffected."
           }
         }
       ]

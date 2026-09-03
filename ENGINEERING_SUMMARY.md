@@ -45,7 +45,9 @@ high-level. Normalized into a concrete engineering problem:
 - Test scaffolding (unit + integration) was **generated** from the service/controller contracts, then
   **edited** to add negative-path cases the first draft omitted: expired-link redirect, malformed JSON,
   duplicate-alias race, generation-exhaustion.
-- Quality gates applied: JaCoCo coverage gate (80% line, enforced at `mvn verify`); manual review of every
+- Quality gates applied: JaCoCo coverage gate (originally set to 80% line; lowered to the 75% `pom.xml`
+  currently enforces during the tenancy/security/rate-limiting/billing pass — see §6's Limitations for why,
+  and the current live value is always `pom.xml`'s, not this historical note); manual review of every
   generated file for Spring idioms and security implications before acceptance (see §5 for what a real
   `mvn verify` run would additionally need to confirm, given this sandbox's constraints — noted in
   Limitations).
@@ -154,8 +156,11 @@ richer options as out-of-scope rather than guessing at unstated requirements or 
 **Assumptions:**
 - H2 in-memory DB is acceptable for this exercise (assignment explicitly requests it); state resets on
   restart — not a production persistence story.
-- No authentication is required for this exercise's scope (assignment doesn't mention auth); flagged, not
-  built, per "engineering judgment" over-building avoidance.
+- ~~No authentication is required for this exercise's scope~~ **[SUPERSEDED — see §6]** — this was the
+  greenfield scenario's initial scope assumption, made before tenancy/security existed at all. The very next
+  pass added stateless API-key authentication for every management endpoint; this line is kept only as an
+  accurate record of the assumption made at THIS point in the narrative, not as a statement about the
+  current system.
 - "Analytics" means the minimal aggregate form described in §3, not a full event pipeline.
 
 **Trade-offs:**
@@ -166,20 +171,34 @@ richer options as out-of-scope rather than guessing at unstated requirements or 
   prototype scale; would need revisiting at very high write throughput or multi-instance deployment without
   a shared sequence.
 
+> **A note on reading the list below**: everything under "Limitations" was accurate *as of the greenfield
+> scenario described in this section* — before tenancy, security, rate limiting, billing, the admin API, or
+> the production-readiness pass existed. Several of these were addressed in later passes and are marked
+> `[SUPERSEDED]` inline, with a pointer to where. This section is preserved rather than edited away because
+> it's part of the traceability record the assignment asks for — showing what was known/missing at each
+> point, not just the final state. If you're looking for the *current* limitations, see README.md §10 or
+> ENGINEERING_SUMMARY.md §5.
+
 **Limitations (explicit, not hidden):**
 - **This project was not compiled or executed during authoring** — the sandbox used to produce it has no
   access to Maven Central and no local `javac`. Every file was manually reviewed for type correctness,
-  Spring wiring, and import completeness at the time, not compiler-verified. This has since changed — see
-  the Verification Record (§15) for the actual `mvn clean verify` results once this was built and run
-  outside that sandbox. This note is kept here as an accurate record of the state at the time this scenario
-  was written, not retroactively edited away.
+  Spring wiring, and import completeness at the time, not compiler-verified. **[SUPERSEDED — see §15]**:
+  `mvn clean verify` has since actually been run, by the candidate/author, outside this sandbox, and passed.
+  This note is kept here as an accurate record of the state at the time this scenario was written, not
+  retroactively edited away.
 - DB-level unique-constraint violations on `shortCode` (a true concurrent race past the `existsByShortCode`
   pre-check) are not yet specifically caught and mapped to `409` — they would currently surface via the
-  generic `Exception` handler as a `500`. Noted as a follow-up, not fixed here, to keep scope honest.
-- No rate limiting on `POST /api/v1/urls` or on redirects.
+  generic `Exception` handler as a `500`. **[SUPERSEDED — see §12 "ACID hardening"]**: this was fixed during
+  the production-readiness pass; `UrlShortenerServiceImpl` now catches `DataIntegrityViolationException` on
+  both the custom-alias and generated-code paths and maps it correctly.
+- No rate limiting on `POST /api/v1/urls` or on redirects. **[SUPERSEDED — see §6]**: added in the very next
+  pass (per-tenant fair-share buckets, both the management API and the redirect hot path).
 - No OpenAPI/Swagger UI wired up (would be a natural next addition given `springdoc-openapi`).
+  **[SUPERSEDED]**: `OpenApiConfig` and `/swagger-ui.html` were added shortly after this scenario — see
+  README.md §4 for the working link.
 - Single-node scheduled cleanup (`@Scheduled`) would need a distributed lock (e.g. ShedLock) if this service
-  ever ran with more than one instance, to avoid redundant/duplicate cleanup runs.
+  ever ran with more than one instance, to avoid redundant/duplicate cleanup runs. **Still accurate** — not
+  superseded; `ExpiredUrlCleanupService` remains single-node-only. Listed as a known gap in README.md §10.
 
 ---
 
@@ -541,9 +560,10 @@ running the system, which is exactly why §15 below matters as much as it does.
 ## 15. Verification Record
 
 The single most important update in this project's history: it has now actually been compiled and run,
-outside the authoring sandbox, by the person evaluating it — not merely reviewed for plausibility. The
-caveats in §5 and §6 above are left in place as an accurate record of what was true *at the time those
-passes were written*, not retroactively edited into looking like this was always known to work.
+outside the authoring sandbox, by the candidate/author — not merely reviewed for plausibility, and not yet
+independently confirmed by whoever evaluates this submission next. The caveats in §5 and §6 above are left
+in place as an accurate record of what was true *at the time those passes were written*, not retroactively
+edited into looking like this was always known to work.
 
 | Item | Value |
 |---|---|

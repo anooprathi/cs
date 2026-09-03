@@ -84,7 +84,7 @@ feature-flagged on) → alias-collision or random-code-generation → persist �
 
 | Scenario | Handling |
 |---|---|
-| Two requests race to claim the same custom alias | DB unique constraint on `shortCode` is the real backstop; the `existsByShortCode` pre-check is a fast-fail UX improvement, not the sole guarantee. *(Noted limitation: a duplicate-key exception from the DB itself is not yet mapped to 409 — see Limitations.)* |
+| Two requests race to claim the same custom alias | DB unique constraint on `shortCode` is the real backstop; the `existsByShortCode` pre-check is a fast-fail UX improvement, not the sole guarantee. **[SUPERSEDED]** A `DataIntegrityViolationException` from the DB is now caught and mapped to the same `409 DuplicateAliasException` the pre-check would throw — see §7.2 "ACID / concurrency hardening." (This note previously said the opposite — "not yet mapped to 409" — accurate when written, fixed in the production-readiness pass.) |
 | Random code generator collides repeatedly | Bounded retry (5 attempts) then `ShortCodeGenerationException` → `500` with a safe, non-leaking message; server-side log captures detail for on-call. |
 | Redirect requested for expired link | `410 Gone`, distinct from `404`, so clients/analytics can tell "never existed" apart from "existed, now expired." |
 | External URL-safety service down (if enabled) | Fails open (treats URL as safe) rather than blocking all link creation on a third-party outage — a deliberate availability-over-strictness trade-off, logged at ERROR for visibility. |

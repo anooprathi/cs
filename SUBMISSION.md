@@ -46,7 +46,7 @@ Swagger UI (`/swagger-ui.html`) and the Postman collection (`postman/url-shorten
 35 requests, auto-chaining) both give a working, exploratory path through every endpoint without reading
 code first.
 
-**This has now been compiled and run — by the person evaluating it, outside the sandbox that authored it —
+**This has now been compiled and run — by the candidate/author, outside the sandbox that authored it —
 and passed.** That distinction matters enough to state precisely rather than blur: the assistant that wrote
 this code never had a compiler available in its own environment (no access to Maven Central, no local
 `javac`); every fix made *during authoring* was a careful, hand-verified guess, not a compiler-confirmed one,
