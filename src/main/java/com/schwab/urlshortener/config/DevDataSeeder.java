@@ -32,14 +32,19 @@ public class DevDataSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         TenantRegistrationResponse standard = tenantService.register(
-                new TenantRegistrationRequest("demo-standard-tenant", RateLimitPlan.STANDARD));
-        TenantRegistrationResponse premium = tenantService.register(
-                new TenantRegistrationRequest("demo-premium-tenant", RateLimitPlan.PREMIUM));
+                new TenantRegistrationRequest("demo-standard-tenant"));
+        TenantRegistrationResponse premiumSeed = tenantService.register(
+                new TenantRegistrationRequest("demo-premium-tenant"));
+        // Registration itself no longer accepts a plan — even the demo
+        // seed data goes through the real, correct flow: register on
+        // STANDARD, then upgrade via the same admin action a real operator
+        // would use (see TenantRegistrationRequest's Javadoc for why).
+        tenantService.updatePlan(premiumSeed.tenantId(), RateLimitPlan.PREMIUM);
 
         log.info("=================================================================");
         log.info(" DEV SEED DATA — demo tenants (see README.md for curl examples)");
         log.info(" STANDARD tenant '{}' -> API key: {}", standard.name(), standard.apiKey());
-        log.info(" PREMIUM  tenant '{}' -> API key: {}", premium.name(), premium.apiKey());
+        log.info(" PREMIUM  tenant '{}' -> API key: {} (registered STANDARD, upgraded via admin action)", premiumSeed.name(), premiumSeed.apiKey());
         log.info("=================================================================");
     }
 }

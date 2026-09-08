@@ -27,7 +27,8 @@ import java.time.Instant;
 @Table(
         name = "tenant",
         indexes = {
-                @Index(name = "idx_tenant_api_key_hash", columnList = "apiKeyHash", unique = true)
+                @Index(name = "idx_tenant_api_key_hash", columnList = "apiKeyHash", unique = true),
+                @Index(name = "idx_tenant_normalized_name", columnList = "normalizedName", unique = true)
         }
 )
 @Getter
@@ -43,6 +44,19 @@ public class Tenant {
 
     @Column(nullable = false, length = 100)
     private String name;
+
+    /**
+     * Lowercased, trimmed form of {@code name}, computed once at creation
+     * (see TenantService.register) and given the actual DB-level unique
+     * constraint above — {@code name} itself deliberately has none.
+     * "Acme Corp" and "ACME CORP" should not be able to register as two
+     * separate tenants just because a raw string-equality check would see
+     * them as different; the display name stays exactly as the caller
+     * typed it, this column exists purely so uniqueness means what a human
+     * reading two names would expect it to mean.
+     */
+    @Column(nullable = false, length = 100)
+    private String normalizedName;
 
     @Column(nullable = false, unique = true, length = 64)
     private String apiKeyHash;

@@ -144,6 +144,35 @@ class InvoiceServiceTest {
     }
 
     @Test
+    void generateInvoice_racesPastPreCheck_stillThrowsDuplicateConflict_notA500() {
+        // Regression test for a gap a production review found: this exact
+        // check-then-save race was already fixed for short-code creation
+        // in UrlShortenerServiceImpl, but the identical pattern here was
+        // never given the same fix. The pre-check passes (no invoice found
+        // yet), but a concurrent request wins the race and the DB's unique
+        // constraint on (tenantId, billingPeriod) rejects this save — that
+        // must surface as the same clean 409 the normal duplicate path
+        // throws, not an unhandled 500.
+        Invoice winner = Invoice.builder()
+                .id(9L).invoiceNumber("INV-2026-08-000001").tenantId(1L).billingPeriod("2026-08")
+                .plan(RateLimitPlan.STANDARD).status(InvoiceStatus.ISSUED).build();
+        // First call (the pre-check): nothing found yet. Second call (after
+        // losing the race, re-fetching to report the winner's number):
+        // the concurrent request's now-committed invoice.
+        when(repository.findByTenantIdAndBillingPeriod(1L, "2026-08"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(billingService.getStatementForPeriod(1L, RateLimitPlan.STANDARD, "2026-08"))
+                .thenReturn(new BillingStatementResponse(1L, RateLimitPlan.STANDARD, "2026-08", 60, 50, 700, 500, 0, 220, 220));
+        when(repository.save(any(Invoice.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint violation"));
+
+        assertThatThrownBy(() -> invoiceService.generateInvoice(1L, RateLimitPlan.STANDARD, null))
+                .isInstanceOf(DuplicateInvoiceException.class)
+                .hasMessageContaining("INV-2026-08-000001");
+    }
+
+    @Test
     void listInvoices_returnsTenantsInvoicesOnly() {
         Invoice invoice = Invoice.builder()
                 .id(1L).invoiceNumber("INV-2026-08-000001").tenantId(1L).billingPeriod("2026-08")

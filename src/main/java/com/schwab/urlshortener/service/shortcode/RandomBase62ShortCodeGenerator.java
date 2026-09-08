@@ -14,7 +14,18 @@ import java.security.SecureRandom;
 @Component
 public class RandomBase62ShortCodeGenerator implements ShortCodeGenerator {
 
-    private static final int CODE_LENGTH = 7;
+    // Increased from 7 to 10 following a production review's point about
+    // collision frequency at real volume: 62^7 (~3.5 trillion) sounds
+    // large in isolation, but the birthday-paradox collision rate climbs
+    // fast well before a keyspace is "full" — at real production link
+    // volumes over years of operation, 7 characters starts making
+    // MAX_GENERATION_ATTEMPTS retries (see UrlShortenerServiceImpl)
+    // meaningfully more frequent than at prototype scale. 62^10
+    // (~8.4 * 10^17) pushes that threshold far out with no format change
+    // needed elsewhere — ShortCodeFormat.CHARSET_AND_LENGTH already
+    // accepts 4-20 characters, so this fits the existing bounds custom
+    // aliases and route matching already enforce.
+    private static final int CODE_LENGTH = 10;
 
     private final SecureRandom secureRandom = new SecureRandom();
 

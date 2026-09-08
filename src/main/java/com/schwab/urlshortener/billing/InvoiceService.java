@@ -5,6 +5,7 @@ import com.schwab.urlshortener.exception.InvalidBillingPeriodException;
 import com.schwab.urlshortener.exception.InvoiceNotFoundException;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,17 @@ public class InvoiceService {
         this.usageMeteringService = usageMeteringService;
     }
 
+    /**
+     * ACID note (a gap a production review correctly found — the same
+     * check-then-save race already fixed in UrlShortenerServiceImpl's
+     * short-code creation was never applied here, despite the identical
+     * shape): the existsByTenantIdAndBillingPeriod check above is a
+     * fast-fail UX improvement, not the actual guarantee. Two concurrent
+     * requests generating an invoice for the same period can race past it;
+     * the DB's unique constraint on (tenantId, billingPeriod) is the real
+     * backstop, and its violation must resolve to the same clean 409 this
+     * method's normal duplicate check throws — not an unhandled 500.
+     */
     @Transactional
     public InvoiceResponse generateInvoice(Long tenantId, RateLimitPlan plan, String requestedPeriod) {
         String period = requestedPeriod != null ? requestedPeriod : usageMeteringService.currentPeriod();
@@ -59,7 +71,20 @@ public class InvoiceService {
                 .status(InvoiceStatus.ISSUED)
                 .build();
 
-        Invoice saved = repository.save(invoice);
+        Invoice saved;
+        try {
+            saved = repository.save(invoice);
+        } catch (DataIntegrityViolationException e) {
+            // Lost the race: a concurrent request for the same (tenantId,
+            // period) won and committed first. Re-fetch its invoice number
+            // for the same client-facing message the normal duplicate path
+            // gives — the caller shouldn't be able to tell the difference
+            // between "checked and it already existed" and "raced and it
+            // existed by the time we tried to save," and doesn't need to.
+            Invoice winner = repository.findByTenantIdAndBillingPeriod(tenantId, period)
+                    .orElseThrow(() -> e); // genuinely shouldn't happen — rethrow the original if it does
+            throw new DuplicateInvoiceException(period, winner.getInvoiceNumber());
+        }
         log.info("Generated invoice {} for tenantId={} period={} totalChargeCents={}",
                 saved.getInvoiceNumber(), tenantId, period, saved.getTotalChargeCents());
 

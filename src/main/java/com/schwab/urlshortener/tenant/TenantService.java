@@ -1,13 +1,16 @@
 package com.schwab.urlshortener.tenant;
 
+import com.schwab.urlshortener.exception.DuplicateTenantNameException;
 import com.schwab.urlshortener.exception.TenantNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -21,19 +24,45 @@ public class TenantService {
 
     @Transactional
     public TenantRegistrationResponse register(TenantRegistrationRequest request) {
+        String normalizedName = normalize(request.name());
+
+        // Fast-fail pre-check (fine UX, not the actual guarantee) — same
+        // TOCTOU-aware pattern as UrlShortenerServiceImpl's short-code
+        // creation: the real guarantee is the DB's unique constraint on
+        // normalizedName, backstopped by the catch below for a race that
+        // slips past this check under real concurrency.
+        if (repository.existsByNormalizedName(normalizedName)) {
+            throw new DuplicateTenantNameException(request.name());
+        }
+
         String rawApiKey = ApiKeyGenerator.generate();
         Tenant tenant = Tenant.builder()
                 .name(request.name())
+                .normalizedName(normalizedName)
                 .apiKeyHash(ApiKeyGenerator.hash(rawApiKey))
-                .plan(request.plan() != null ? request.plan() : RateLimitPlan.STANDARD)
+                // Every self-registered tenant starts on STANDARD, unconditionally — there
+                // is no caller-supplied plan anymore (see TenantRegistrationRequest's
+                // Javadoc for why accepting one was a real vulnerability, not a shortcut).
+                // A plan change is exclusively an authenticated admin action from here on
+                // (updatePlan below), never something declared at registration time.
+                .plan(RateLimitPlan.STANDARD)
                 .active(true)
                 .build();
 
-        Tenant saved = repository.save(tenant);
+        Tenant saved;
+        try {
+            saved = repository.save(tenant);
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateTenantNameException(request.name());
+        }
         // Deliberately never log the raw key — only the fact that a tenant was created.
         log.info("Registered new tenant: id={} name={} plan={}", saved.getId(), saved.getName(), saved.getPlan());
 
         return new TenantRegistrationResponse(saved.getId(), saved.getName(), saved.getPlan(), rawApiKey, saved.getCreatedAt());
+    }
+
+    private static String normalize(String name) {
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 
     @Transactional(readOnly = true)
