@@ -11,12 +11,23 @@ project's documentation.
 
 ## 1. What this is
 
+**Positioning, stated up front and unambiguously: this is a production-informed prototype, not a
+production-ready system.** It was built with real production concerns in mind — authentication, rate
+limiting, billing, observability — and a rigorous, adversarial self-review (and, separately, the candidate's
+own independent production-readiness review) found and fixed genuine issues along the way. But "informed by
+production concerns" and "ready to actually run in production" are different claims, and this project does
+not have everything the second one requires — no persistent database, no schema migrations, no CI/CD, no
+container image, no real administrative identity system beyond a single shared credential, and more (see the
+Production Readiness Roadmap in `README.md`). Every place in this document or elsewhere that could read as
+claiming otherwise should be read through this positioning, not around it.
+
 A multi-tenant URL shortener built with Spring Boot 3.3.4 / Spring Cloud / Spring Data JPA / H2, developed
 through iterative, AI-assisted engineering sessions. It went well beyond the assignment's minimum scope
-(core APIs, analytics, reliability) into a genuinely production-shaped system: API-key authentication,
+(core APIs, analytics, reliability) into a genuinely production-*informed* system: API-key authentication,
 per-tenant fair-share rate limiting, usage-based billing and PDF invoicing, a separate admin API for
 cross-tenant visibility, and a production-readiness pass (async execution, ACID hardening, observability,
-multi-instance/multi-DC-ready rate limiting).
+multi-instance/multi-DC-ready rate limiting) — followed by an independent production review that correctly
+pushed back on several places where "informed by" had drifted toward sounding like "ready for."
 
 **Read these in this order:**
 1. This file — orientation and evaluation-criteria mapping.
@@ -39,38 +50,40 @@ multi-instance/multi-DC-ready rate limiting).
 
 ```bash
 mvn clean verify   # build + full test suite + JaCoCo coverage report
-mvn spring-boot:run  # runs on http://localhost:8080, dev profile, demo tenants seeded and logged
+mvn spring-boot:run -Dspring-boot.run.profiles=dev   # a profile is now required — see RequiredProfileGuard
 ```
 
-Swagger UI (`/swagger-ui.html`) and the Postman collection (`postman/url-shortener.postman_collection.json`,
-35 requests, auto-chaining) both give a working, exploratory path through every endpoint without reading
-code first.
+Swagger UI (`/swagger-ui.html`, disabled in the `prod` profile — see application-prod.properties) and the
+Postman collection (`postman/url-shortener.postman_collection.json`, 39 requests, auto-chaining, every
+request asserted) both give a working, exploratory path through every endpoint without reading code first.
 
-**This has now been compiled and run — by the candidate/author, outside the sandbox that authored it —
-and passed.** That distinction matters enough to state precisely rather than blur: the assistant that wrote
-this code never had a compiler available in its own environment (no access to Maven Central, no local
-`javac`); every fix made *during authoring* was a careful, hand-verified guess, not a compiler-confirmed one,
-and `ENGINEERING_SUMMARY.md` §9-10 document two occasions where that process got something wrong before
-getting it right. What changed the picture: `mvn clean verify` was actually run, for real, and passed — see
-the Verification Record below for the specific numbers — and four further edge-case bugs were found through
-genuine end-to-end and Postman testing afterward (§14 of `ENGINEERING_SUMMARY.md`), all now fixed. The
-authoring-time uncertainty is real project history, kept visible rather than edited away; it is no longer the
-open question about the code you're looking at right now.
+**Status: NOT YET independently verified for the current commit — stated plainly rather than glossed over.**
+The assistant that wrote this code never had a compiler available in its own environment (no access to Maven
+Central, no local `javac`); every fix made *during authoring* was a careful, hand-verified guess, not a
+compiler-confirmed one, and `ENGINEERING_SUMMARY.md` §9-10 document two occasions where that process got
+something wrong before getting it right. An earlier `mvn clean verify` run against a *prior* commit did pass,
+and separately, the candidate/author's own manual runtime testing found several real configuration issues
+(now fixed — see §17-19 of `ENGINEERING_SUMMARY.md`) that no unit test would have caught. But the codebase has
+changed materially since that last full `mvn clean verify` pass — the JaCoCo gate was raised back to 80%,
+new test classes were added to support that, and further security/billing fixes were applied — and **that
+specific, current commit has not yet had a fresh `mvn clean verify` run against it**. Treat any
+"verification passed" language elsewhere in this project's history as describing an earlier commit, not this
+one, until the table below is actually filled in from a real run.
 
-### Verification Record
+### Verification Record — `<TODO>` values below are not yet filled in for the current commit
 
 | Item | Value |
 |---|---|
 | Date verified | `<TODO: fill in — date of the verification run>` |
+| Commit verified | `<TODO: the exact git commit hash>` |
 | Java version | `<TODO: paste the output of` `java -version` `>` |
 | Maven version | `<TODO: paste the output of` `mvn -version` `>` |
 | Command run | `mvn clean verify` |
 | Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
-| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html>` |
-| Application smoke test | Started via `mvn spring-boot:run`; create → redirect → stats → deactivate flow
+| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html — confirm it actually clears 0.80>` |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate flow
   confirmed working end-to-end |
-| Postman collection | Full collection run confirmed working, following the ordering fix in §14 of
-  `ENGINEERING_SUMMARY.md` |
+| Postman collection | `<TODO: confirm the current 39-request collection runs clean, including the rewritten rate-limit burst test>` |
 
 The `<TODO>` placeholders are deliberate — those exact figures exist only in the verifier's own terminal
 output, not in the environment that authored this document, and a fabricated number here would undermine

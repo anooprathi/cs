@@ -1,6 +1,13 @@
 # URL Shortener — AI-Assisted Engineering Assignment (Charles Schwab)
 
-A multi-tenant, production-style URL shortener built with **Spring Boot 3 / Spring Cloud (OpenFeign) /
+**Positioning: a production-informed prototype, not a production-ready system.** It was built with real
+production concerns in mind (auth, rate limiting, billing, observability), and an adversarial self-review
+plus an independent production-readiness review both found and fixed genuine issues along the way — but it
+does not yet have everything actual production deployment requires (persistent database, migrations, CI/CD,
+a real administrative identity system, and more). See §10 "Known Limitations" and the "Production Readiness
+Roadmap" at the end of this document for the full, honest accounting.
+
+A multi-tenant, production-*informed* URL shortener built with **Spring Boot 3 / Spring Cloud (OpenFeign) /
 Spring Data JPA / H2 / Spring Security**, with per-tenant fair-share rate limiting and usage-based billing,
 developed using AI-assisted engineering practices as described in `ENGINEERING_SUMMARY.md`.
 
@@ -79,16 +86,12 @@ mvn clean install
 
 ### Run
 
+A profile is now **required** — the app refuses to start without one (see `RequiredProfileGuard`; a
+production review correctly flagged the old implicit "dev" default as a real security issue, not a
+convenience):
 ```bash
-# Runs with the "dev" profile (the default — see application.properties),
-# which enables the H2 console and seeds two demo tenants, printing their
-# API keys to the console log on startup.
-mvn spring-boot:run
-```
-
-To run with a specific profile explicitly:
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=dev    # local development (default)
+mvn spring-boot:run -Dspring-boot.run.profiles=dev    # local development — H2 console, seeded demo tenants,
+                                                       # their API keys printed to the console log on startup
 mvn spring-boot:run -Dspring-boot.run.profiles=prod   # production-shaped config
 
 # or, running the packaged jar directly:
@@ -109,7 +112,7 @@ JaCoCo report: `target/site/jacoco/index.html`.
 
 ## 4. How to Run It Yourself — curl Walkthrough
 
-Everything below assumes the service is running locally on port 8080 (`mvn spring-boot:run`, dev profile).
+Everything below assumes the service is running locally on port 8080 (`mvn spring-boot:run -Dspring-boot.run.profiles=dev`).
 
 ### 4.1 Register a tenant (no auth needed — this is how you get a key)
 
@@ -482,25 +485,29 @@ genuinely requires infrastructure outside this repository for true multi-DC oper
   multi-instance/multi-DC operation, since local buckets let a tenant's effective limit multiply by instance
   count. The app was already stateless otherwise (no server-side sessions).
 
-## 9. Verification Record
+## 9. Verification Record — STATUS: NOT YET CONFIRMED FOR THE CURRENT COMMIT
 
-This project has been independently built and run **outside** the authoring sandbox — the "not compiled"
-caveat that applied throughout most of this project's history no longer applies to the current codebase.
-Four real bugs (§13-14 of `ENGINEERING_SUMMARY.md`) were found this way and are already fixed in the code
-you're looking at.
+An earlier `mvn clean verify` run against a *prior* commit did pass, and separately, manual runtime testing
+found several real configuration issues (dev defaulting silently, operational endpoints reachable
+unauthenticated, unrestricted premium registration — all now fixed, see §17-19 of `ENGINEERING_SUMMARY.md`)
+that no unit test alone would have caught. But this codebase has changed materially since that last full
+`mvn clean verify` pass — the JaCoCo gate was raised back to 80%, new test classes were added to support
+that, and further security/billing fixes were applied — and **the current commit has not yet had a fresh
+`mvn clean verify` run against it**. Any statement elsewhere implying "verification passed" describes an
+earlier commit, not this one, until the table below is filled in for real.
 
 | Item | Value |
 |---|---|
 | Date verified | `<TODO: fill in — date of the verification run>` |
+| Commit verified | `<TODO: the exact git commit hash>` |
 | Java version | `<TODO: paste the output of` `java -version` `>` |
 | Maven version | `<TODO: paste the output of` `mvn -version` `>` |
 | Command run | `mvn clean verify` |
 | Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
-| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html>` |
-| Application smoke test | Started via `mvn spring-boot:run`; create → redirect → stats → deactivate flow
+| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html — confirm it actually clears 0.80>` |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see RequiredProfileGuard); create → redirect → stats → deactivate flow
   confirmed working end-to-end |
-| Postman collection | Full collection run confirmed working, following the reordering fix in §13 of
-  `ENGINEERING_SUMMARY.md` (the deactivate step previously ran before the redirect tests it would have broken) |
+| Postman collection | `<TODO: confirm the current 39-request collection, including the rewritten rate-limit burst test, runs clean>` |
 
 The four `<TODO>` rows above need the literal values from that verification run substituted in — placeholders
 were left rather than invented numbers, since a fabricated test count or coverage percentage here would be a
@@ -520,7 +527,116 @@ See `ENGINEERING_SUMMARY.md` §5 for the full list. Highlights:
 - True multi-datacenter deployment requires real infrastructure (DB replication topology, cross-DC traffic
   routing, secrets distribution) this codebase cannot itself provide — see ARCHITECTURE.md §7.4 for exactly
   where that line sits.
-- Still on Spring Boot 3.3.4 — see §7 above for why a Boot 4 upgrade was attempted and reverted.
-- `GlobalExceptionHandler`'s handlers for `RateLimitExceededException`/`MethodArgumentTypeMismatchException`,
-  and `ExpiredUrlCleanupService` entirely, have no direct test coverage — flagged in a code review pass and
-  correctly scoped as "flag, not necessarily fix" (see `ENGINEERING_SUMMARY.md` §13), still open.
+- Still on Spring Boot 3.3.4 — see §7 above for why a Boot 4 upgrade was attempted and reverted. It's also no
+  longer one of Spring's actively-maintained community versions (3.4/3.5 are current) — a real deployment
+  should upgrade Spring Boot and Spring Cloud together and add automated dependency-currency checks.
+- ~~`GlobalExceptionHandler`'s handlers for `RateLimitExceededException`/`MethodArgumentTypeMismatchException`,
+  and `ExpiredUrlCleanupService` entirely, had no direct test coverage~~ — addressed: `GlobalExceptionHandlerTest`
+  and `ExpiredUrlCleanupServiceTest` now cover both directly (see `ENGINEERING_SUMMARY.md` §16).
+
+## 11. Production Readiness Roadmap
+
+Everything below is a genuine, currently-open gap between this prototype and an actual production
+deployment — organized by what it would take to close each one, not glossed over. Items marked **(code)**
+are pure application-code/config changes that could be made without new infrastructure; items marked
+**(infra)** require real infrastructure this project's own codebase cannot provide or verify on its own
+(a real database, a CI runner, a container registry, a monitoring stack, etc.) — attempting to fake those
+would be worse than naming them plainly.
+
+### Data & persistence **(infra + code)**
+- Replace in-memory H2 with PostgreSQL (or MySQL) for any real deployment; nothing in the JPA/Hibernate
+  layer is H2-specific, but the actual database, its connection details, and its operational ownership
+  (backups, HA) are infrastructure outside this repository.
+- Add Flyway or Liquibase migrations, and switch `spring.jpa.hibernate.ddl-auto` from `update` to `validate`
+  in production — schema changes should be an explicit, reviewed, versioned migration, not something
+  Hibernate infers and applies automatically at startup.
+- Add real foreign-key constraints between tenants, links, usage records, and invoices (today these are
+  plain indexed `Long` columns — a deliberate simplicity trade-off documented in `ARCHITECTURE.md`, not an
+  oversight, but one a real deployment should revisit alongside the migration work above, since retrofitting
+  FK constraints onto a live table with any pre-existing orphaned rows needs a real migration, not just an
+  entity annotation).
+- Backups, point-in-time recovery, and periodic restore testing — none of which exist today because there's
+  no persistent store to back up in the first place.
+
+### Authentication & access control **(code, mostly)**
+- Rate-limit tenant registration, invalid-key attempts, and admin endpoints by IP/client — today's
+  `RateLimitFilter` only ever sees *authenticated* requests; an unauthenticated flood against
+  `POST /api/v1/tenants` or repeated invalid-key guesses against any protected route has no throttle at all.
+- Replace the single shared admin credential with a real identity system (OIDC/RBAC or equivalent) —
+  workable for one operator, not for an organization with more than a handful of people needing admin access
+  and no way to tell them apart in an audit log.
+- Add API-key lifecycle management: rotation, expiry, revocation, scopes, last-used timestamps, and an audit
+  history of key usage — today a key is valid forever from creation until a tenant is suspended outright,
+  with no finer-grained control.
+- Protect `/actuator/metrics` and `/actuator/prometheus` with something more purpose-built than reusing the
+  admin credential (done as an interim fix — see `SecurityConfig`'s Javadoc for why it's explicitly flagged
+  as pragmatic, not final) — a real deployment would put these on a private network/port a monitoring system
+  reaches without going through the public-facing filter chain at all.
+
+### Abuse prevention & data handling **(code + infra)**
+- Enable URL reputation/malware/phishing checks by default in production (`FeignUrlSafetyChecker` is real
+  and wired, feature-flagged off because there's no real safety-check provider to call from this
+  environment — flipping it on requires an actual external service, which is infra, not code).
+- Add domain/destination deny-lists, abuse reporting, and takedown support — none of which exist today.
+- Replace regex-only URL validation with real URI parsing and explicit scheme/host validation (today's
+  `@Pattern`-based check accepts anything shaped like a URL; it doesn't parse and validate it as one).
+- Stop logging complete destination URLs verbatim — redact query parameters and fragments before they ever
+  reach a log line, since a shortened URL can legitimately contain tokens or personal information in its
+  query string.
+- Layer edge/IP/global rate limits ahead of this application (a gateway or WAF) — today, an anonymous caller
+  hitting `GET /{shortCode}` is only rate-limited against the *link owner's* quota (a deliberate design — see
+  `ARCHITECTURE.md` — but one an independent review correctly noted means an attacker can exhaust a victim's
+  own redirect quota by hammering their public link; the owner-quota check is real protection against
+  runaway cost, not a substitute for edge-level abuse controls).
+
+### Billing correctness **(code, substantial redesign)**
+- Introduce closed billing periods — today, a tenant can invoice the current (still-accruing) month early,
+  and the existing duplicate-invoice protection then permanently blocks generating the corrected final
+  invoice once the month actually closes. A real system needs an explicit period-close step before
+  invoicing is allowed, or a superseding/correction mechanism.
+- Store versioned plan/pricing snapshots per billing period — invoices currently rate historical usage
+  against the tenant's *current* plan and pricing configuration, so a plan or price change retroactively
+  changes what a past invoice would compute to if regenerated.
+- Replace the async, at-most-once usage counters with a transactional outbox or durable event stream if
+  billing needs to be exact-to-the-event (the current trade-off — occasional lost or, more precisely,
+  possibly-orphaned events on a rollback — is stated plainly in `UsageMeteringService`'s own Javadoc as
+  acceptable for usage *summaries*, explicitly not for real charging).
+- Add currency handling, taxes, credits, refunds, payment state, and accounting reconciliation if billing
+  ever needs to charge a real payment instrument — today it computes and reports what's owed, in cents,
+  in one implied currency, and never touches a payment processor at all, by design.
+- Paginate invoice history (`GET /invoices` currently returns every invoice a tenant has ever generated,
+  unbounded — the same category of gap already fixed for the admin listing endpoints, not yet applied here).
+
+### Scalability & reliability **(code, mostly)**
+- Use the Redis rate-limiter backend (already built — see `RedisRateLimiterBackend`) for any multi-instance
+  deployment; the default `local` backend means limits multiply by instance count.
+- Make the Redis backend's `INCR` + expiry check genuinely atomic (a Lua script, or a proven distributed
+  rate-limiting library) rather than the current two-command-plus-self-healing-check approach — functional
+  and tested against the specific failure mode it targets, but a hand-rolled approximation of what a
+  purpose-built library would guarantee more rigorously.
+- Cache short-code-to-URL mappings and tenant plan lookups — every redirect currently does a live DB lookup
+  for both; fine at prototype scale, a real bottleneck at high redirect volume.
+- Move click-count analytics off the synchronous hot-row `UPDATE` and toward batched/streamed aggregation —
+  correct and race-free today, but a point contention risk under very high per-link traffic.
+- Change expired-link cleanup from "load every expired row, save them all" to a paged or bulk `UPDATE`, add
+  a composite `(active, expires_at)` index, and add a distributed lock (e.g. ShedLock) before this ever runs
+  as more than one instance — today it's correct for a single instance and would do redundant work, though
+  not incorrect work, across several.
+
+### Delivery & operations **(infra, entirely)**
+- CI pipeline running tests, coverage, static analysis, and packaging on every change — none exists; this
+  project has been validated by manual `mvn clean verify` runs only.
+- A Dockerfile and reproducible deployment definition — none exists; "how this actually gets deployed
+  anywhere" is entirely unaddressed by this repository.
+- Testcontainers-based tests against a real database and Redis, plus load/concurrency/soak testing — the
+  existing test suite validates logic correctness against H2 and mocks; it says nothing about behavior under
+  real concurrent load or against a real Postgres/Redis.
+- Dependency, secret, SAST, container, and license scanning, plus SBOM generation — none configured.
+- Dashboards, alerts, SLOs, a runbook, rollback procedure, and disaster-recovery/restore testing — none
+  exist because there's no running production deployment to operate in the first place.
+
+None of the above is presented as "coming soon" in a way that implies it's simple — several of these
+(billing period closure, the outbox pattern, a real admin identity system, the entire delivery/operations
+list) are substantial engineering efforts in their own right, comparable in scope to portions of this project
+that already took multiple iterative passes. They're listed here because a "production-informed prototype"
+should say precisely what separates it from a production-ready system, not leave that gap implicit.

@@ -654,12 +654,22 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "pm.test('status is 201 (first generation) or 409 (already generated this period)', () => {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
                   "if (pm.response.code === 201) {",
                   "    const body = pm.response.json();",
+                  "    pm.test('invoice response has the expected shape', () => {",
+                  "        pm.expect(body.invoiceId).to.be.a('number');",
+                  "        pm.expect(body.invoiceNumber).to.be.a('string');",
+                  "        pm.expect(body.status).to.eql('ISSUED');",
+                  "        pm.expect(body.totalChargeCents).to.be.a('number');",
+                  "    });",
                   "    pm.collectionVariables.set('invoiceId', body.invoiceId);",
                   "    console.log('Saved invoiceId:', body.invoiceId);",
                   "} else {",
-                  "    console.log('Not 201 (likely 409 \u2014 an invoice for this period already exists). invoiceId left unchanged.');",
+                  "    console.log('409 -- an invoice for this period already exists. invoiceId left unchanged.');",
                   "}"
                 ]
               }
@@ -1431,14 +1441,21 @@
           }
         },
         {
-          "name": "404 - Root Path (no route defined)",
+          "name": "403 - Root Path (no route defined, denyAll catchall)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                  "// SecurityConfig's catchall changed from permitAll() to denyAll() -- a",
+                  "// production review correctly flagged permitAll() as a real security gap",
+                  "// (it was silently opening /actuator/metrics and /actuator/prometheus, not",
+                  "// just harmless unmapped paths). With denyAll(), an unmatched route is now",
+                  "// rejected by Security before it ever reaches the point where",
+                  "// NoResourceFoundException would produce a 404 -- so this is 403 now,",
+                  "// intentionally, not a regression.",
+                  "pm.test('status is 403 (denyAll catchall, not the old permitAll)', () => pm.response.to.have.status(403));"
                 ]
               }
             }
@@ -1454,7 +1471,8 @@
               "path": [
                 ""
               ]
-            }
+            },
+            "description": "Unmatched routes are now rejected by SecurityConfig's denyAll() catchall before reaching NoResourceFoundException's 404 handling -- see GlobalExceptionHandlerTest for that handler's own coverage, still exercised for authenticated requests to unmapped API sub-paths."
           }
         },
         {
@@ -1617,48 +1635,69 @@
           }
         },
         {
-          "name": "429 - Rate Limit (run via Collection Runner, ~25 iterations)",
+          "name": "429 - Rate Limit (self-contained burst, no Runner iterations needed)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Reset the observed flag on the first iteration of a Runner pass,",
-                  "// so a leftover 'true' from a previous run can't hide a real failure now.",
-                  "if (pm.info.iteration === 0) {",
-                  "    pm.collectionVariables.set('rateLimitObserved', 'false');",
-                  "}"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "console.log('iteration', pm.info.iteration, '| status:', pm.response.code, '| X-RateLimit-Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+                  "// Self-contained: does NOT depend on Collection Runner 'Iterations'.",
+                  "// A prior version relied on selecting just this request and setting",
+                  "// Iterations manually -- easy to get wrong, and running the WHOLE",
+                  "// collection with N iterations instead re-registers a fresh tenant",
+                  "// every iteration (Setup > Register Tenant), permanently resetting the",
+                  "// bucket each time so 429 could never be observed regardless of N.",
+                  "//",
+                  "// This version fires a burst against the SAME, already-registered",
+                  "// {{apiKey}} entirely within this one script execution via",
+                  "// pm.sendRequest, chained recursively. Works whether this runs as the",
+                  "// last step of a full sequential collection pass (bucket already has",
+                  "// ~19 prior uses from earlier folders -- the burst crosses 20 almost",
+                  "// immediately) or in isolation right after Setup (bucket starts at 0 --",
+                  "// the burst crosses 20 partway through 30 calls either way).",
                   "",
-                  "if (pm.response.code === 429) {",
-                  "    pm.collectionVariables.set('rateLimitObserved', 'true');",
-                  "    pm.test('rate limited as expected', () => pm.response.to.have.status(429));",
-                  "    console.log('Retry-After:', pm.response.headers.get('Retry-After'));",
-                  "} else {",
-                  "    pm.test('status is 200 while still under the limit', () => pm.response.to.have.status(200));",
+                  "const apiKey = pm.collectionVariables.get('apiKey');",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "const BURST_SIZE = 30;",
+                  "",
+                  "pm.collectionVariables.set('rateLimitObserved', 'false');",
+                  "",
+                  "function fireOne(remaining, results, onDone) {",
+                  "    if (remaining <= 0) {",
+                  "        onDone(results);",
+                  "        return;",
+                  "    }",
+                  "    pm.sendRequest({",
+                  "        url: baseUrl + '/api/v1/tenants/me',",
+                  "        method: 'GET',",
+                  "        header: { 'X-API-Key': apiKey }",
+                  "    }, function (err, res) {",
+                  "        if (err) {",
+                  "            console.log('pm.sendRequest error (treated as non-429):', err);",
+                  "            results.push(null);",
+                  "        } else {",
+                  "            results.push(res.code);",
+                  "            if (res.code === 429) {",
+                  "                pm.collectionVariables.set('rateLimitObserved', 'true');",
+                  "            }",
+                  "        }",
+                  "        fireOne(remaining - 1, results, onDone);",
+                  "    });",
                   "}",
                   "",
-                  "// The actual fix for the silent-pass problem: previously, the ONLY",
-                  "// pm.test() call was inside the 429 branch above, so if the burst never",
-                  "// actually tripped the limiter across all iterations, ZERO assertions",
-                  "// ever ran and Collection Runner reported a clean 'nothing failed' \u2014",
-                  "// which looks identical to a real pass. This final-iteration check makes",
-                  "// 'the limiter was never actually observed to trigger' a real, visible",
-                  "// failure instead of silence.",
-                  "if (pm.info.iteration === pm.info.iterationCount - 1) {",
-                  "    pm.test('rate limit was actually triggered at least once during this run (set Iterations high enough - >20 for STANDARD)', () => {",
-                  "        pm.expect(pm.collectionVariables.get('rateLimitObserved')).to.eql('true');",
+                  "fireOne(BURST_SIZE, [], function (results) {",
+                  "    console.log('Burst of', BURST_SIZE, 'requests -- status codes:', results.join(', '));",
+                  "    const sawRateLimit = pm.collectionVariables.get('rateLimitObserved') === 'true';",
+                  "",
+                  "    pm.test('at least one 200 was observed before the limit kicked in', () => {",
+                  "        pm.expect(results).to.include(200);",
                   "    });",
-                  "}"
+                  "",
+                  "    pm.test('rate limit (429) was actually triggered during a ' + BURST_SIZE + '-request burst against a single key', () => {",
+                  "        pm.expect(sawRateLimit, 'expected at least one 429 among: ' + results.join(', ')).to.be.true;",
+                  "    });",
+                  "});"
                 ]
               }
             }
@@ -1683,7 +1722,7 @@
                 "me"
               ]
             },
-            "description": "A single hit returns 200 with X-RateLimit-* headers. To actually trip the STANDARD-plan limit (default 20/min), select just this request in Collection Runner and set Iterations to 25 or more \u2014 you'll see 200s flip to 429s partway through. The final iteration's test FAILS if a 429 was never observed across the whole run, so an Iterations count set too low (or a misconfigured limit) shows up as a real failure, not a silent all-green pass. Run the same against apiKey2 afterward to confirm the other tenant is unaffected."
+            "description": "Self-contained rate-limit test -- see the Tests script. Just run this ONE request normally (Send, or as part of a full collection run) -- no special Collection Runner setup needed. Fires a 30-request burst against {{apiKey}} via pm.sendRequest from within the test script itself."
           }
         }
       ]
