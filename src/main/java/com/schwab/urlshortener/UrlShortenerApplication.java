@@ -29,6 +29,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class UrlShortenerApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(UrlShortenerApplication.class, args);
+        SpringApplication app = new SpringApplication(UrlShortenerApplication.class);
+        // Registered directly here, not as a @Component — see
+        // RequiredProfileGuard's Javadoc for why a normal bean would run
+        // too late to matter.
+        app.addListeners(new com.schwab.urlshortener.config.RequiredProfileGuard());
+        app.run(args);
     }
 }

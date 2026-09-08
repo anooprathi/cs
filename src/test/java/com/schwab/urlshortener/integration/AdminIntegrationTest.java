@@ -67,7 +67,7 @@ class AdminIntegrationTest {
         urlMappingRepository.deleteAll();
         tenantRepository.deleteAll();
 
-        TenantRegistrationRequest request = new TenantRegistrationRequest("acme-" + System.nanoTime(), RateLimitPlan.STANDARD);
+        TenantRegistrationRequest request = new TenantRegistrationRequest("acme-" + System.nanoTime());
         String body = mockMvc.perform(post("/api/v1/tenants")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -84,6 +84,31 @@ class AdminIntegrationTest {
     void adminEndpoint_withoutAdminKey_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/admin/tenants"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void actuatorMetrics_withoutAdminKey_isProtected_notPublic() throws Exception {
+        // Regression test for a real production-review finding: this
+        // endpoint was reachable completely unauthenticated purely because
+        // nothing in SecurityConfig explicitly claimed it and the old
+        // catchall defaulted to permitAll(). Internal operational detail
+        // (redirect volume, rate-limit rejections by plan, JVM internals)
+        // has no business being world-readable.
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void actuatorPrometheus_withoutAdminKey_isProtected_notPublic() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void actuatorMetrics_withAdminKey_isReachable() throws Exception {
+        mockMvc.perform(get("/actuator/metrics")
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isOk());
     }
 
     @Test

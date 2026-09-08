@@ -23,9 +23,25 @@ import java.io.IOException;
 /**
  * Stateless, API-key-based security for the management API. The public
  * redirect endpoint, tenant self-registration, health checks, and API
- * docs are explicitly permitted without a key; everything else under
- * /api/v1/** requires either a tenant identity or, for /api/v1/admin/**,
- * the separate admin credential.
+ * docs (dev only — see application-prod.properties) are explicitly
+ * permitted without a key; everything else under /api/v1/** requires
+ * either a tenant identity or, for /api/v1/admin/**, the separate admin
+ * credential. The catchall is denyAll(), not permitAll() — a route this
+ * app doesn't explicitly account for should be refused by default, not
+ * silently open. (This was a real gap a production review found:
+ * /actuator/metrics and /actuator/prometheus were reachable
+ * unauthenticated purely because nothing claimed them and the old
+ * catchall defaulted to open.)
+ *
+ * Note on protecting metrics/prometheus with ROLE_ADMIN specifically:
+ * this is a pragmatic fit for this app's existing identity model (there
+ * is no separate "monitoring/scrape" role), not a complete answer — a
+ * real deployment would more likely put these on a private
+ * network/port a scraper reaches without going through this filter
+ * chain at all, or use a dedicated scrape credential rather than the
+ * same one used for tenant administration. Documented as a roadmap item
+ * (README.md "Production Readiness Roadmap"), not silently left as if
+ * ROLE_ADMIN were the final answer.
  *
  * Ordering matters:
  *  1. {@link AdminAuthenticationFilter} and {@link ApiKeyAuthenticationFilter}
@@ -68,8 +84,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/{shortCode:" + ShortCodeFormat.CHARSET_AND_LENGTH + "}").permitAll()
                         // Tenant self-registration must be reachable with no key yet.
                         .requestMatchers(HttpMethod.POST, "/api/v1/tenants").permitAll()
-                        // Ops/infra endpoints.
+                        // Spring's internal error-view forwarding must stay reachable even under a
+                        // denyAll() catchall, or an unrelated failure elsewhere can get masked by a
+                        // confusing secondary 403 from Security intercepting the forward itself —
+                        // a well-known gotcha when moving a catchall from permitAll to denyAll.
+                        .requestMatchers("/error").permitAll()
+                        // Ops/infra endpoints — health/info only. Metrics and Prometheus are NOT
+                        // permitAll: they're internal operational detail (redirect volume,
+                        // rate-limit rejections by plan, JVM internals), gated behind the admin
+                        // identity rather than left open to anyone (see class Javadoc above).
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**", "/actuator/prometheus").hasRole("ADMIN")
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // Admin surface — a distinct role, checked before the broader tenant rule below
@@ -77,7 +102,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Everything else under the management API requires a tenant identity.
                         .requestMatchers("/api/v1/**").authenticated()
-                        .anyRequest().permitAll()
+                        // Deliberately denyAll, not permitAll — see class Javadoc.
+                        .anyRequest().denyAll()
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(this::handleUnauthenticated)

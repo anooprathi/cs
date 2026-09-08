@@ -7,7 +7,6 @@ import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.entity.UrlMapping;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
 import com.schwab.urlshortener.security.ApiKeyAuthenticationFilter;
-import com.schwab.urlshortener.tenant.RateLimitPlan;
 import com.schwab.urlshortener.tenant.TenantRegistrationRequest;
 import com.schwab.urlshortener.tenant.TenantRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,11 +75,15 @@ class UrlShortenerIntegrationTest {
         tenantUsageRecordRepository.deleteAll();
         repository.deleteAll();
         tenantRepository.deleteAll();
-        apiKey = registerTenant("acme-" + System.nanoTime(), RateLimitPlan.STANDARD);
+        apiKey = registerTenant("acme-" + System.nanoTime());
     }
 
-    private String registerTenant(String name, RateLimitPlan plan) throws Exception {
-        TenantRegistrationRequest request = new TenantRegistrationRequest(name, plan);
+    private String registerTenant(String name) throws Exception {
+        // No plan parameter: registration is always STANDARD now (see
+        // TenantRegistrationRequest's Javadoc) -- every call site here
+        // already only ever passed STANDARD, so this simplification loses
+        // no test coverage.
+        TenantRegistrationRequest request = new TenantRegistrationRequest(name);
         String body = mockMvc.perform(post("/api/v1/tenants")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -211,15 +214,41 @@ class UrlShortenerIntegrationTest {
     }
 
     @Test
-    void rootPath_matchesNoRoute_returns404NotUnhandled500() throws Exception {
+    void rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500() throws Exception {
         // GET / matches no controller mapping (RedirectController's short-code
         // pattern requires 4-20 characters, so an empty path doesn't qualify).
-        // Spring Framework 6.1+ throws NoResourceFoundException for a genuinely
-        // unmatched route; without an explicit handler for it in
-        // GlobalExceptionHandler this incorrectly fell through to the generic
-        // catch-all and surfaced as a 500 instead of a 404 — regression test
-        // for that fix.
+        //
+        // This assertion changed from 404 to 403 when SecurityConfig's
+        // catchall changed from permitAll() to denyAll() (a production
+        // review correctly flagged the old permitAll fallback as a real
+        // security gap — see SecurityConfig's Javadoc). With denyAll(),
+        // Spring Security's AuthorizationFilter now rejects an unmatched
+        // route BEFORE the request ever reaches DispatcherServlet, so the
+        // NoResourceFoundException -> 404 path (still correctly handled in
+        // GlobalExceptionHandler, and still exercised by
+        // redirect_unknownShortCode_returns404 above for an unmatched
+        // SHORT CODE specifically) never gets the chance to fire for a
+        // route this app has no matcher for at all. The actual thing this
+        // test protects against — a genuinely unmatched route surfacing as
+        // an unhandled 500 — is still what's being verified; only the
+        // specific status code changed, and 403 is the more conservative,
+        // intentional choice per the security fix, not a regression.
         mockMvc.perform(get("/"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    void unmappedSubPathWithinAuthenticatedNamespace_stillReturns404NotUnhandled500() throws Exception {
+        // Preserves the actual regression coverage the test above lost when
+        // its own status code changed: an AUTHENTICATED request that passes
+        // SecurityConfig's ".../api/v1/**".authenticated() rule but matches
+        // no actual controller mapping still needs to hit
+        // NoResourceFoundException -> GlobalExceptionHandler -> a clean 404,
+        // not fall through to the generic Exception.class handler as an
+        // unhandled 500 (the original bug this whole handler exists to fix).
+        mockMvc.perform(get("/api/v1/this-endpoint-does-not-exist")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status", is(404)));
     }
@@ -274,7 +303,7 @@ class UrlShortenerIntegrationTest {
                 .andExpect(status().isCreated());
 
         // Tenant B, a completely different tenant, tries to read tenant A's stats.
-        String otherApiKey = registerTenant("other-tenant-" + System.nanoTime(), RateLimitPlan.STANDARD);
+        String otherApiKey = registerTenant("other-tenant-" + System.nanoTime());
         mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "tenant-a-link")
                         .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey))
                 .andExpect(status().isNotFound());
@@ -293,7 +322,7 @@ class UrlShortenerIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        String otherApiKey = registerTenant("other-tenant-b-" + System.nanoTime(), RateLimitPlan.STANDARD);
+        String otherApiKey = registerTenant("other-tenant-b-" + System.nanoTime());
         mockMvc.perform(delete("/api/v1/urls/{shortCode}", "tenant-a-link-2")
                         .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey))
                 .andExpect(status().isNotFound());
@@ -407,7 +436,7 @@ class UrlShortenerIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long invoiceId = objectMapper.readTree(body).get("invoiceId").asLong();
 
-        String otherApiKey = registerTenant("invoice-other-tenant-" + System.nanoTime(), RateLimitPlan.STANDARD);
+        String otherApiKey = registerTenant("invoice-other-tenant-" + System.nanoTime());
         mockMvc.perform(get("/api/v1/tenants/me/invoices/{id}", invoiceId)
                         .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey))
                 .andExpect(status().isNotFound());
