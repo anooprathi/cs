@@ -200,4 +200,78 @@ class TenantServiceTest {
 
         verify(repository, never()).save(any());
     }
+
+    // ---------- updateCustomDomain ----------
+
+    @Test
+    void updateCustomDomain_setsDomain_whenUnclaimed() {
+        Tenant tenant = Tenant.builder().id(1L).name("acme").active(true).build();
+        when(repository.findById(1L)).thenReturn(Optional.of(tenant));
+        when(repository.findByCustomDomain("go.acme.com")).thenReturn(Optional.empty());
+        when(repository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Tenant result = tenantService.updateCustomDomain(1L, "go.acme.com");
+
+        assertThat(result.getCustomDomain()).isEqualTo("go.acme.com");
+    }
+
+    @Test
+    void updateCustomDomain_clearingToNull_neverChecksForCollision() {
+        Tenant tenant = Tenant.builder().id(1L).name("acme").active(true).customDomain("go.acme.com").build();
+        when(repository.findById(1L)).thenReturn(Optional.of(tenant));
+        when(repository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Tenant result = tenantService.updateCustomDomain(1L, null);
+
+        assertThat(result.getCustomDomain()).isNull();
+        verify(repository, never()).findByCustomDomain(any());
+    }
+
+    @Test
+    void updateCustomDomain_reassigningSameTenantsOwnDomain_isNotATreatedAsConflict() {
+        // Re-submitting the domain a tenant already owns is a legitimate
+        // no-op, not a collision with "itself" — this is the exact reason
+        // the collision check filters out the tenant being updated.
+        Tenant tenant = Tenant.builder().id(1L).name("acme").active(true).customDomain("go.acme.com").build();
+        when(repository.findById(1L)).thenReturn(Optional.of(tenant));
+        when(repository.findByCustomDomain("go.acme.com")).thenReturn(Optional.of(tenant));
+        when(repository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Tenant result = tenantService.updateCustomDomain(1L, "go.acme.com");
+
+        assertThat(result.getCustomDomain()).isEqualTo("go.acme.com");
+    }
+
+    @Test
+    void updateCustomDomain_alreadyClaimedByAnotherTenant_throwsConflict() {
+        Tenant tenant = Tenant.builder().id(1L).name("acme").active(true).build();
+        Tenant otherTenant = Tenant.builder().id(2L).name("other").customDomain("go.taken.com").build();
+        when(repository.findById(1L)).thenReturn(Optional.of(tenant));
+        when(repository.findByCustomDomain("go.taken.com")).thenReturn(Optional.of(otherTenant));
+
+        assertThatThrownBy(() -> tenantService.updateCustomDomain(1L, "go.taken.com"))
+                .isInstanceOf(com.schwab.urlshortener.exception.DuplicateCustomDomainException.class);
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateCustomDomain_racesPastPreCheck_stillThrowsConflict_notA500() {
+        Tenant tenant = Tenant.builder().id(1L).name("acme").active(true).build();
+        when(repository.findById(1L)).thenReturn(Optional.of(tenant));
+        when(repository.findByCustomDomain("go.acme.com")).thenReturn(Optional.empty());
+        when(repository.save(any(Tenant.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint violation"));
+
+        assertThatThrownBy(() -> tenantService.updateCustomDomain(1L, "go.acme.com"))
+                .isInstanceOf(com.schwab.urlshortener.exception.DuplicateCustomDomainException.class);
+    }
+
+    @Test
+    void updateCustomDomain_unknownTenant_throwsNotFound() {
+        when(repository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tenantService.updateCustomDomain(999L, "go.acme.com"))
+                .isInstanceOf(com.schwab.urlshortener.exception.TenantNotFoundException.class);
+    }
 }

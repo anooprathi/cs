@@ -149,6 +149,25 @@ class AdminServiceTest {
     }
 
     @Test
+    void updateCustomDomain_delegatesToTenantServiceAndReturnsSummary() {
+        Tenant updated = Tenant.builder().id(1L).name("acme").plan(RateLimitPlan.STANDARD).active(true)
+                .createdAt(Instant.now()).customDomain("go.acme.com").build();
+        when(tenantService.updateCustomDomain(1L, "go.acme.com")).thenReturn(updated);
+
+        AdminTenantSummaryResponse result = adminService.updateCustomDomain(1L, "go.acme.com");
+
+        assertThat(result.customDomain()).isEqualTo("go.acme.com");
+    }
+
+    @Test
+    void updateCustomDomain_unknownTenant_propagatesNotFound() {
+        when(tenantService.updateCustomDomain(999L, "go.acme.com")).thenThrow(new TenantNotFoundException(999L));
+
+        assertThatThrownBy(() -> adminService.updateCustomDomain(999L, "go.acme.com"))
+                .isInstanceOf(TenantNotFoundException.class);
+    }
+
+    @Test
     void listTenantUrls_returnsAllLinksIncludingInactive() {
         when(tenantService.getTenantById(1L)).thenReturn(Tenant.builder().id(1L).name("acme").build());
         UrlMapping active = UrlMapping.builder().shortCode("abc1234").originalUrl("https://example.com").active(true).clickCount(1).createdAt(Instant.now()).build();

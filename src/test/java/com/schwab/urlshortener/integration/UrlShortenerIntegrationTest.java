@@ -344,6 +344,156 @@ class UrlShortenerIntegrationTest {
     }
 
     @Test
+    void listMyUrls_returnsOnlyThisTenantsLinks_activeAndInactive() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/list-a", "list-link-a", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/list-b", "list-link-b", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(delete("/api/v1/urls/{shortCode}", "list-link-b")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isNoContent());
+
+        // A different tenant's link must never show up in this listing.
+        String otherApiKey = registerTenant("list-other-" + System.nanoTime());
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/not-yours", "not-your-link", null))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/urls").header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[*].shortCode", containsInAnyOrder("list-link-a", "list-link-b")))
+                .andExpect(jsonPath("$.content[?(@.shortCode == 'list-link-b')].active", contains(false)));
+    }
+
+    @Test
+    void listMyUrls_withoutApiKey_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/urls"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void updateUrl_changesDestination_andRedirectFollowsNewTarget() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/old-destination", "edit-me", null))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}", "edit-me")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://www.schwab.com/new-destination\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.originalUrl", is("https://www.schwab.com/new-destination")));
+
+        // The redirect cache must not serve the stale destination after the edit.
+        mockMvc.perform(get("/{shortCode}", "edit-me"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://www.schwab.com/new-destination"));
+    }
+
+    @Test
+    void updateUrl_withNeitherFieldProvided_returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/noop", "noop-update", null))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}", "noop-update")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void tenantCannotUpdateAnotherTenantsLink() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/protected", "protected-link", null))))
+                .andExpect(status().isCreated());
+
+        String otherApiKey = registerTenant("update-other-" + System.nanoTime());
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}", "protected-link")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://evil.example.com/hijacked\"}"))
+                .andExpect(status().isNotFound());
+
+        // The real owner's destination is untouched.
+        mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "protected-link")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(jsonPath("$.originalUrl", is("https://www.schwab.com/protected")));
+    }
+
+    @Test
+    void reactivate_bringsBackADeactivatedLink() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/reactivate-me", "reactivate-me", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(delete("/api/v1/urls/{shortCode}", "reactivate-me")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/{shortCode}", "reactivate-me")).andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}/reactivate", "reactivate-me")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active", is(true)));
+
+        mockMvc.perform(get("/{shortCode}", "reactivate-me"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "https://www.schwab.com/reactivate-me"));
+    }
+
+    @Test
+    void reactivate_unknownShortCode_returns404() throws Exception {
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}/reactivate", "doesNotExist1")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void tenantCannotReactivateAnotherTenantsLink() throws Exception {
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/theirs", "theirs-link", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(delete("/api/v1/urls/{shortCode}", "theirs-link")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isNoContent());
+
+        String otherApiKey = registerTenant("reactivate-other-" + System.nanoTime());
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}/reactivate", "theirs-link")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, otherApiKey))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/{shortCode}", "theirs-link")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rateLimitHeaders_presentOnAuthenticatedManagementRequests() throws Exception {
         mockMvc.perform(get("/api/v1/tenants/me").header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
                 .andExpect(status().isOk())

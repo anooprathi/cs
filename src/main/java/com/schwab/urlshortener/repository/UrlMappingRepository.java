@@ -21,6 +21,12 @@ public interface UrlMappingRepository extends JpaRepository<UrlMapping, Long> {
      *  at the query level, not just via an application-level check. */
     Optional<UrlMapping> findByShortCodeAndActiveTrueAndTenantId(String shortCode, Long tenantId);
 
+    /** Tenant-scoped lookup that deliberately ignores active status — used
+     *  by update/reactivate, where "currently inactive" is an expected,
+     *  valid state to find (that's the whole point of reactivate), not a
+     *  "does not exist" case like the active-only lookup above. */
+    Optional<UrlMapping> findByShortCodeAndTenantId(String shortCode, Long tenantId);
+
     boolean existsByShortCode(String shortCode);
 
     Optional<UrlMapping> findFirstByOriginalUrlAndActiveTrueAndExpiresAtIsNull(String originalUrl);

@@ -9,6 +9,7 @@ public record AdminTenantSummaryResponse(
         String name,
         RateLimitPlan plan,
         boolean active,
-        Instant createdAt
+        Instant createdAt,
+        String customDomain
 ) {
 }

@@ -13,6 +13,7 @@ public record AdminTenantDetailResponse(
         RateLimitPlan plan,
         boolean active,
         Instant createdAt,
+        String customDomain,
         long totalLinkCount,
         String currentBillingPeriod,
         long apiCallsThisPeriod,

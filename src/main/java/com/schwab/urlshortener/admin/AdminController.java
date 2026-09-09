@@ -64,6 +64,16 @@ public class AdminController {
         return ResponseEntity.ok(adminService.updateStatus(tenantId, request.active()));
     }
 
+    /** Sets or clears (customDomain: null) a tenant's branded short-link
+     *  domain, e.g. go.company.com. Application-level only: this records
+     *  the association, it does not provision DNS or TLS — see Tenant's
+     *  customDomain Javadoc and README "Custom domains" for that boundary. */
+    @PatchMapping("/tenants/{tenantId}/domain")
+    public ResponseEntity<AdminTenantSummaryResponse> updateCustomDomain(@PathVariable Long tenantId,
+                                                                           @Valid @RequestBody AdminUpdateDomainRequest request) {
+        return ResponseEntity.ok(adminService.updateCustomDomain(tenantId, request.customDomain()));
+    }
+
     /** Rotates a tenant's API key when the original is lost — the old key
      *  stops working immediately (no overlap window). The new raw key is
      *  returned exactly once, mirroring registration (TenantService.register);

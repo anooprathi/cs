@@ -1,6 +1,7 @@
 package com.schwab.urlshortener.tenant;
 
 import com.schwab.urlshortener.config.CacheConfig;
+import com.schwab.urlshortener.exception.DuplicateCustomDomainException;
 import com.schwab.urlshortener.exception.DuplicateTenantNameException;
 import com.schwab.urlshortener.exception.TenantNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -188,5 +189,38 @@ public class TenantService {
         // Deliberately never log the raw key — only the fact that a rotation happened.
         log.info("Admin rotated API key for tenant {}", tenantId);
         return new TenantApiKeyRotationResult(saved, rawApiKey);
+    }
+
+    /**
+     * Sets or clears (null) a tenant's custom short-link domain. Admin-only
+     * by design — same reasoning as plan changes: claiming a domain has
+     * real-world implications a tenant shouldn't be able to self-assign.
+     *
+     * Same TOCTOU-safe shape as register()/rotateApiKey(): a fast pre-check
+     * against a DIFFERENT tenant already owning the domain, backstopped by
+     * the database's own unique index for the race a pre-check alone can't
+     * close.
+     */
+    @Transactional
+    public Tenant updateCustomDomain(Long tenantId, String customDomain) {
+        Tenant tenant = getTenantById(tenantId);
+
+        if (customDomain != null) {
+            repository.findByCustomDomain(customDomain)
+                    .filter(existing -> !existing.getId().equals(tenantId))
+                    .ifPresent(existing -> {
+                        throw new DuplicateCustomDomainException(customDomain);
+                    });
+        }
+
+        tenant.setCustomDomain(customDomain);
+        Tenant saved;
+        try {
+            saved = repository.save(tenant);
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateCustomDomainException(customDomain);
+        }
+        log.info("Admin set tenant {} customDomain={}", tenantId, customDomain);
+        return saved;
     }
 }

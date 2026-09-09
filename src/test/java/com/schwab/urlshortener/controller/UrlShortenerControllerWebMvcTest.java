@@ -1,9 +1,12 @@
 package com.schwab.urlshortener.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.schwab.urlshortener.dto.PageResponse;
 import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.dto.ShortenUrlResponse;
+import com.schwab.urlshortener.dto.UpdateUrlRequest;
 import com.schwab.urlshortener.dto.UrlStatsResponse;
+import com.schwab.urlshortener.exception.InvalidUrlException;
 import com.schwab.urlshortener.exception.UrlExpiredException;
 import com.schwab.urlshortener.exception.UrlNotFoundException;
 import com.schwab.urlshortener.service.UrlShortenerService;
@@ -183,5 +186,57 @@ class UrlShortenerControllerWebMvcTest {
         mockMvc.perform(delete("/api/v1/urls/{shortCode}", "abc1234")
                         .with(authenticatedAsTenant()))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void listMyUrls_returnsServiceResult() throws Exception {
+        UrlStatsResponse stats = new UrlStatsResponse("abc1234", "https://example.com", 10L,
+                Instant.now(), Instant.now(), null, true);
+        when(service.listMyUrls(eq(TENANT.tenantId()), any()))
+                .thenReturn(new PageResponse<>(List.of(stats), 0, 50, 1, 1));
+
+        mockMvc.perform(get("/api/v1/urls").with(authenticatedAsTenant()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].shortCode", is("abc1234")))
+                .andExpect(jsonPath("$.totalElements", is(1)));
+    }
+
+    @Test
+    void updateUrl_delegatesToServiceAndReturnsUpdatedStats() throws Exception {
+        UpdateUrlRequest request = new UpdateUrlRequest("https://new.example.com", null);
+        UrlStatsResponse updated = new UrlStatsResponse("abc1234", "https://new.example.com", 10L,
+                Instant.now(), Instant.now(), null, true);
+        when(service.updateUrl(eq("abc1234"), eq(TENANT.tenantId()), any(UpdateUrlRequest.class))).thenReturn(updated);
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}", "abc1234")
+                        .with(authenticatedAsTenant())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(OBJECT_MAPPER.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.originalUrl", is("https://new.example.com")));
+    }
+
+    @Test
+    void updateUrl_serviceThrowsInvalidUrl_mapsTo400() throws Exception {
+        when(service.updateUrl(eq("abc1234"), eq(TENANT.tenantId()), any(UpdateUrlRequest.class)))
+                .thenThrow(new InvalidUrlException("At least one of originalUrl or expiresAt must be provided"));
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}", "abc1234")
+                        .with(authenticatedAsTenant())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reactivate_delegatesToServiceAndReturnsStats() throws Exception {
+        UrlStatsResponse stats = new UrlStatsResponse("old1234", "https://example.com", 5L,
+                Instant.now(), Instant.now(), null, true);
+        when(service.reactivate("old1234", TENANT.tenantId())).thenReturn(stats);
+
+        mockMvc.perform(patch("/api/v1/urls/{shortCode}/reactivate", "old1234")
+                        .with(authenticatedAsTenant()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active", is(true)));
     }
 }

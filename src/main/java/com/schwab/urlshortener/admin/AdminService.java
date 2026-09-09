@@ -71,6 +71,7 @@ public class AdminService {
                 tenant.getPlan(),
                 tenant.isActive(),
                 tenant.getCreatedAt(),
+                tenant.getCustomDomain(),
                 linkCount,
                 period,
                 usage != null ? usage.getApiCallCount() : 0L,
@@ -93,6 +94,11 @@ public class AdminService {
         TenantApiKeyRotationResult result = tenantService.rotateApiKey(tenantId);
         return new AdminApiKeyRotationResponse(
                 result.tenant().getId(), result.tenant().getName(), result.rawApiKey(), Instant.now());
+    }
+
+    @Transactional
+    public AdminTenantSummaryResponse updateCustomDomain(Long tenantId, String customDomain) {
+        return toSummary(tenantService.updateCustomDomain(tenantId, customDomain));
     }
 
     @Transactional(readOnly = true)
@@ -150,7 +156,8 @@ public class AdminService {
 
     private AdminTenantSummaryResponse toSummary(Tenant tenant) {
         return new AdminTenantSummaryResponse(
-                tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.isActive(), tenant.getCreatedAt());
+                tenant.getId(), tenant.getName(), tenant.getPlan(), tenant.isActive(), tenant.getCreatedAt(),
+                tenant.getCustomDomain());
     }
 
     private AdminUrlSummaryResponse toUrlSummary(UrlMapping mapping) {

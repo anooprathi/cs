@@ -212,6 +212,43 @@ curl -s -i -X DELETE http://localhost:8080/api/v1/urls/schwab-research \
 # HTTP/1.1 204 No Content
 ```
 
+### 4.6a List your own links, update one, and undo a deactivation
+
+Three tenant-facing operations added after the initial build, for a real functional gap: there was no way
+for a tenant to enumerate their own links (only look one up by a code you already knew), no way to fix a
+typo'd destination without losing the link's history, and no way to undo an accidental deactivation.
+
+```bash
+# Every link you've ever created, active or not (paginated: page/size, default 50/page)
+curl -s http://localhost:8080/api/v1/urls \
+  -H "X-API-Key: $API_KEY"
+```
+```json
+{
+  "content": [
+    {"shortCode": "schwab-research", "originalUrl": "https://www.schwab.com/research", "clickCount": 1,
+     "createdAt": "...", "lastAccessedAt": "...", "expiresAt": null, "active": true}
+  ],
+  "page": 0, "size": 50, "totalElements": 1, "totalPages": 1
+}
+```
+
+```bash
+# Fix a typo'd destination, or push the expiry out — both fields optional,
+# at least one required. Re-validated through the same safety checker as creation.
+curl -s -X PATCH http://localhost:8080/api/v1/urls/schwab-research \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"originalUrl": "https://www.schwab.com/research-2026"}'
+
+# Undo an accidental deactivation — idempotent if the link is already active.
+# Note: reactivating a link whose expiresAt is already in the past brings it
+# back to active=true, but it will still 410 on the next redirect until its
+# expiry is also pushed out via the PATCH above — these are deliberately two
+# separate actions, not one implicit "reactivate and extend."
+curl -s -X PATCH http://localhost:8080/api/v1/urls/schwab-research/reactivate \
+  -H "X-API-Key: $API_KEY"
+```
+
 ### 4.7 Check your current billing statement
 ```bash
 curl -s http://localhost:8080/api/v1/tenants/me/billing \
@@ -362,6 +399,19 @@ curl -s http://localhost:8080/api/v1/admin/usage \
 # like at registration; it cannot be retrieved again after this response.
 curl -s -X POST http://localhost:8080/api/v1/admin/tenants/1/rotate-key \
   -H "X-Admin-Key: $ADMIN_KEY"
+
+# Branded/custom domain: application-level association only — this does NOT
+# provision DNS or a TLS certificate for the domain (see §12 "Custom domains"
+# for that explicit boundary). Once set, new links created by this tenant use
+# it in their returned shortUrl.
+curl -s -X PATCH http://localhost:8080/api/v1/admin/tenants/1/domain \
+  -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"customDomain": "go.acme.com"}'
+
+# Clear it — customDomain: null reverts the tenant to the platform's default host.
+curl -s -X PATCH http://localhost:8080/api/v1/admin/tenants/1/domain \
+  -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"customDomain": null}'
 ```
 
 ```bash
@@ -389,13 +439,18 @@ curl -s -i http://localhost:8080/api/v1/admin/tenants
 | GET    | `/api/v1/tenants/me/invoices/{id}`   | API key     | Fetch one invoice |
 | GET    | `/api/v1/tenants/me/invoices/{id}/pdf` | API key   | Download the invoice as a PDF |
 | POST   | `/api/v1/urls`                        | API key     | Create a short URL |
+| GET    | `/api/v1/urls`                        | API key     | List every link this tenant has created, active or not (paginated) |
 | GET    | `/api/v1/urls/{shortCode}/stats`      | API key     | Tenant-scoped — 404s for another tenant's link |
+| PATCH  | `/api/v1/urls/{shortCode}`            | API key     | Update destination and/or expiry — at least one field required |
+| PATCH  | `/api/v1/urls/{shortCode}/reactivate` | API key     | Undo a deactivation — idempotent if already active |
 | DELETE | `/api/v1/urls/{shortCode}`            | API key     | Deactivate (soft delete), tenant-scoped |
 | GET    | `/{shortCode}`                        | **none**    | Public redirect (302), rate-limited against the link owner's quota |
 | GET    | `/api/v1/admin/tenants`               | Admin key   | List every tenant, plan, and active status |
 | GET    | `/api/v1/admin/tenants/{id}`          | Admin key   | One tenant + current-period usage snapshot |
 | PATCH  | `/api/v1/admin/tenants/{id}/plan`     | Admin key   | Change a tenant's plan (upgrade/downgrade) |
 | PATCH  | `/api/v1/admin/tenants/{id}/status`   | Admin key   | Suspend (`active:false`) or reinstate a tenant — blocks their key immediately |
+| POST   | `/api/v1/admin/tenants/{id}/rotate-key` | Admin key | Rotate a tenant's API key (lost-key recovery) — old key stops working immediately |
+| PATCH  | `/api/v1/admin/tenants/{id}/domain`   | Admin key   | Set/clear a tenant's branded short-link domain — application-level association only, no DNS/TLS provisioning |
 | GET    | `/api/v1/admin/tenants/{id}/urls`     | Admin key   | Every link that tenant has created, active or not |
 | GET    | `/api/v1/admin/usage`                 | Admin key   | Platform-wide usage for the current period, broken down by tenant |
 
@@ -665,10 +720,13 @@ tenant/billing-oriented shortener described in the rest of this document.
 Status markers below: unmarked = not implemented at all; **✅** = already covered by something that exists
 today; **◐** = partially covered, with the gap named.
 
-**1. Web dashboard** — none of this exists; the product is API-only today (Swagger UI is API documentation,
-not an operator dashboard). Create/list/search links, view statistics, disable/reactivate, and filter by
-active/expired/disabled would all be new UI surface with no backing implementation to build on beyond the
-existing REST endpoints.
+**1. Web dashboard** — no UI exists; the product is API-only (Swagger UI is API documentation, not an operator
+dashboard). Building one would now have real REST endpoints to sit on top of, not a green field: **◐** listing
+(`GET /api/v1/urls`), viewing statistics (`GET /api/v1/urls/{shortCode}/stats`), and disable/reactivate
+(`DELETE` / `PATCH .../reactivate`) all exist at the API level today — a dashboard would be presentation over
+existing capability, not new capability. Still not implemented at any level: search (the list endpoint pages
+but doesn't filter/search), and filtering by active/expired/disabled specifically (the list endpoint returns
+everything; a caller filters client-side today).
 
 **2. Temporary-link features**
 - Maximum lifetime (e.g. 24h / 30 days as a plan-level policy, not just a caller-supplied date) — not implemented.
@@ -680,7 +738,9 @@ existing REST endpoints.
 
 **3. Link management**
 - Tags and campaign names — not implemented.
-- Destination editing after creation — not implemented (today: create + deactivate only, no update endpoint).
+- Destination editing after creation — **✅** implemented (`PATCH /api/v1/urls/{shortCode}`, added this session —
+  re-validated through the same safety checker as creation, and evicts the redirect cache so an edit takes
+  effect immediately rather than waiting out the cache TTL).
 - Duplicate-URL detection (warn/dedupe when the same destination is shortened twice) — not implemented; today's
   uniqueness check is on the short code/alias, never on the destination URL.
 - Bulk creation via CSV, bulk deactivation — not implemented (every management endpoint is single-link).
@@ -708,8 +768,19 @@ sensitive.
 - Prevent public users from assigning themselves PREMIUM — **✅** already fixed (see `ENGINEERING_SUMMARY.md`
   §19) — registration unconditionally assigns `STANDARD`; a plan change is admin-only.
 
-**6. Custom domains** (e.g. `go.company.com/pricing`) — not implemented; the app serves short links from
-whatever single host it's deployed on, with no per-tenant domain mapping.
+**6. Custom domains** (e.g. `go.company.com/pricing`) — **◐** partial, added this session: an admin can
+associate a branded domain with a tenant (`PATCH /api/v1/admin/tenants/{id}/domain`, `Tenant.customDomain`,
+enforced unique across tenants), and links that tenant creates afterward return a `shortUrl` built from that
+domain instead of the platform default. **What this deliberately does not do**: provision DNS (the domain
+must already be CNAME'd to this deployment by whoever controls it) or issue/manage a TLS certificate for that
+exact hostname — without both, `https://{customDomain}/{shortCode}` won't actually resolve to or be trusted
+for this app. That's real infrastructure (typically a reverse proxy with automatic ACME/Let's Encrypt
+handling, e.g. Caddy or Traefik, sitting in front of this app) in the same category as the Postgres/Redis/K8s
+gaps in §11 — this codebase records and validates the association, it does not and cannot make the domain
+actually work end-to-end on its own. Redirect resolution itself also remains path-only (`GET /{shortCode}`
+matches on path regardless of which `Host` header it arrived on) — the custom domain is purely cosmetic in
+the returned `shortUrl` today, not a routing/namespace change, so short codes are still globally unique across
+all tenants rather than scoped per-domain.
 
 **7. Safety controls**
 - URL malware/phishing scanning — ◐ partial: `FeignUrlSafetyChecker` is real and wired but feature-flagged

@@ -217,6 +217,88 @@ class AdminIntegrationTest {
     }
 
     @Test
+    void updateCustomDomain_setsDomain_andBrandsSubsequentlyCreatedLinks() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"go.acme-test.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customDomain", is("go.acme-test.com")));
+
+        // Confirm it persisted and shows up in the detail view too.
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(jsonPath("$.customDomain", is("go.acme-test.com")));
+
+        // A link created after the domain is set is branded with it.
+        ShortenUrlRequest urlRequest = new ShortenUrlRequest("https://www.schwab.com/branded", null, null);
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, tenantApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(urlRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shortUrl", startsWith("https://go.acme-test.com/")));
+    }
+
+    @Test
+    void updateCustomDomain_clearingToNull_revertsToDefaultHost() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"go.acme-test.com\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customDomain").doesNotExist());
+    }
+
+    @Test
+    void updateCustomDomain_alreadyClaimedByAnotherTenant_returns409() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"go.taken.com\"}"))
+                .andExpect(status().isOk());
+
+        // A second tenant, registered via this test's own flow.
+        TenantRegistrationRequest secondRequest = new TenantRegistrationRequest("second-" + System.nanoTime());
+        String secondBody = mockMvc.perform(post("/api/v1/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(secondRequest)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long secondTenantId = objectMapper.readTree(secondBody).get("tenantId").asLong();
+
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", secondTenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"go.taken.com\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void updateCustomDomain_invalidFormat_returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"https://go.acme.com/path\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateCustomDomain_unknownTenant_returns404() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/tenants/{id}/domain", 999999)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customDomain\": \"go.acme.com\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void rotateApiKey_unknownTenant_returns404() throws Exception {
         mockMvc.perform(post("/api/v1/admin/tenants/{id}/rotate-key", 999999)
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))

@@ -1,8 +1,10 @@
 package com.schwab.urlshortener.service.impl;
 
 import com.schwab.urlshortener.billing.UsageMeteringService;
+import com.schwab.urlshortener.dto.PageResponse;
 import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.dto.ShortenUrlResponse;
+import com.schwab.urlshortener.dto.UpdateUrlRequest;
 import com.schwab.urlshortener.dto.UrlStatsResponse;
 import com.schwab.urlshortener.entity.UrlMapping;
 import com.schwab.urlshortener.exception.DuplicateAliasException;
@@ -25,6 +27,10 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,7 +113,26 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
         log.info("Created short URL: code={} tenantId={} customAlias={} expiresAt={}",
                 saved.getShortCode(), tenantId, isCustom, request.expiresAt());
 
-        return mapper.toShortenResponse(saved, baseUrl);
+        return mapper.toShortenResponse(saved, resolveBaseUrl(tenantId));
+    }
+
+    /**
+     * The tenant's branded domain (admin-assigned, see Tenant.customDomain)
+     * if one is set, otherwise the platform's default host. This is
+     * cosmetic only at the application level — actually reaching
+     * {@code https://{customDomain}/{shortCode}} still requires that
+     * domain's DNS to be pointed at this deployment and a TLS certificate
+     * issued for it, neither of which this method (or this codebase) can
+     * provide; see Tenant's Javadoc for the full boundary.
+     *
+     * One live DB read per creation, not cached: creation is not the hot
+     * path (unlike the redirect resolution CachedShortCodeLookup exists
+     * for), and a custom-domain change should be reflected on the very
+     * next link a tenant creates, not after a cache TTL elapses.
+     */
+    private String resolveBaseUrl(Long tenantId) {
+        String customDomain = tenantService.getTenantOrThrow(tenantId).getCustomDomain();
+        return (customDomain != null && !customDomain.isBlank()) ? "https://" + customDomain : baseUrl;
     }
 
     /**
@@ -223,6 +248,63 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
         repository.save(mapping);
         cachedShortCodeLookup.evict(shortCode);
         log.info("Deactivated short code: {} (tenantId={})", shortCode, tenantId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<UrlStatsResponse> listMyUrls(Long tenantId, Pageable pageable) {
+        // Same createdAt-desc convention as AdminService.listTenantUrls — the
+        // caller supplies page/size, sort order is this service's call, not
+        // something every caller needs to know to ask for.
+        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<UrlStatsResponse> page = repository.findByTenantId(tenantId, sorted).map(mapper::toStatsResponse);
+        return PageResponse.from(page);
+    }
+
+    @Override
+    @Transactional
+    public UrlStatsResponse updateUrl(String shortCode, Long tenantId, UpdateUrlRequest request) {
+        if (request.originalUrl() == null && request.expiresAt() == null) {
+            throw new InvalidUrlException("At least one of originalUrl or expiresAt must be provided");
+        }
+
+        UrlMapping mapping = repository.findByShortCodeAndTenantId(shortCode, tenantId)
+                .orElseThrow(() -> UrlNotFoundException.forTenant(shortCode));
+
+        if (request.originalUrl() != null) {
+            if (!urlSafetyChecker.isSafe(request.originalUrl())) {
+                throw new InvalidUrlException("originalUrl was flagged as unsafe and cannot be used");
+            }
+            mapping.setOriginalUrl(request.originalUrl());
+        }
+        if (request.expiresAt() != null) {
+            mapping.setExpiresAt(request.expiresAt());
+        }
+
+        UrlMapping saved = repository.save(mapping);
+        // Must evict regardless of whether this link is currently active: a
+        // stale cached destination/expiry must not outlive the update just
+        // because the redirect path only re-populates the cache on a miss.
+        cachedShortCodeLookup.evict(shortCode);
+        log.info("Updated short URL: code={} tenantId={} originalUrlChanged={} expiresAtChanged={}",
+                shortCode, tenantId, request.originalUrl() != null, request.expiresAt() != null);
+        return mapper.toStatsResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public UrlStatsResponse reactivate(String shortCode, Long tenantId) {
+        UrlMapping mapping = repository.findByShortCodeAndTenantId(shortCode, tenantId)
+                .orElseThrow(() -> UrlNotFoundException.forTenant(shortCode));
+        mapping.setActive(true);
+        UrlMapping saved = repository.save(mapping);
+        // No cache eviction needed here, unlike deactivate/updateUrl: a miss
+        // (inactive/nonexistent) is never cached in the first place (see
+        // CachedShortCodeLookup's `unless` clause) — there is nothing stale
+        // to evict for a code that was inactive a moment ago.
+        log.info("Reactivated short code: {} (tenantId={})", shortCode, tenantId);
+        return mapper.toStatsResponse(saved);
     }
 
     /**

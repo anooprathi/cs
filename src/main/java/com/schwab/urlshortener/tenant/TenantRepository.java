@@ -16,4 +16,9 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
      * "normalized" means here.
      */
     boolean existsByNormalizedName(String normalizedName);
+
+    /** Used by updateCustomDomain to check for a collision with a
+     *  DIFFERENT tenant — excluding self is the caller's job, since
+     *  "already claimed by me" is a legitimate no-op, not a conflict. */
+    Optional<Tenant> findByCustomDomain(String customDomain);
 }

@@ -28,7 +28,8 @@ import java.time.Instant;
         name = "tenant",
         indexes = {
                 @Index(name = "idx_tenant_api_key_hash", columnList = "apiKeyHash", unique = true),
-                @Index(name = "idx_tenant_normalized_name", columnList = "normalizedName", unique = true)
+                @Index(name = "idx_tenant_normalized_name", columnList = "normalizedName", unique = true),
+                @Index(name = "idx_tenant_custom_domain", columnList = "customDomain", unique = true)
         }
 )
 @Getter
@@ -69,6 +70,27 @@ public class Tenant {
     @Column(nullable = false)
     @Builder.Default
     private boolean active = true;
+
+    /**
+     * Branded/custom short-link domain (e.g. {@code go.company.com}), set
+     * exclusively by an admin (see AdminService.updateCustomDomain) — a
+     * tenant cannot self-assign one, same reasoning as plan changes:
+     * claiming a domain has real-world implications (whoever controls it
+     * can point it here) that shouldn't be a self-service action.
+     * Null means "use the platform's default host" (app.base-url).
+     *
+     * Deliberately application-level only: setting this value records
+     * that the domain is associated with this tenant, but does NOT
+     * provision DNS, TLS certificates, or anything that makes
+     * https://{customDomain} actually resolve to and be trusted by this
+     * application — that's real infrastructure (a CNAME record pointed
+     * here, a certificate issued for that exact hostname, e.g. via a
+     * reverse proxy with automatic ACME/Let's Encrypt handling) outside
+     * what this codebase can provide or verify on its own. See README's
+     * "Custom domains" note for the explicit boundary.
+     */
+    @Column(length = 255)
+    private String customDomain;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

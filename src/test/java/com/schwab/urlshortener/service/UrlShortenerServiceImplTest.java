@@ -1,11 +1,14 @@
 package com.schwab.urlshortener.service;
 
 import com.schwab.urlshortener.billing.UsageMeteringService;
+import com.schwab.urlshortener.dto.PageResponse;
 import com.schwab.urlshortener.dto.ShortenUrlRequest;
 import com.schwab.urlshortener.dto.ShortenUrlResponse;
+import com.schwab.urlshortener.dto.UpdateUrlRequest;
 import com.schwab.urlshortener.dto.UrlStatsResponse;
 import com.schwab.urlshortener.entity.UrlMapping;
 import com.schwab.urlshortener.exception.DuplicateAliasException;
+import com.schwab.urlshortener.exception.InvalidUrlException;
 import com.schwab.urlshortener.exception.RateLimitExceededException;
 import com.schwab.urlshortener.exception.ShortCodeGenerationException;
 import com.schwab.urlshortener.exception.UrlExpiredException;
@@ -17,6 +20,7 @@ import com.schwab.urlshortener.service.impl.CachedShortCodeLookup;
 import com.schwab.urlshortener.service.impl.UrlMappingMapper;
 import com.schwab.urlshortener.service.impl.UrlShortenerServiceImpl;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
+import com.schwab.urlshortener.tenant.Tenant;
 import com.schwab.urlshortener.tenant.TenantService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,10 +31,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +85,9 @@ class UrlShortenerServiceImplTest {
         when(urlSafetyChecker.isSafe(anyString())).thenReturn(true);
         when(shortCodeGenerator.generateCandidate()).thenReturn("aZ3kQ9m");
         when(tenantService.getPlanForRateLimiting(anyLong())).thenReturn(RateLimitPlan.STANDARD);
+        // No custom domain by default — most tests exercise the platform-default host;
+        // see the dedicated "brandedShortUrl" tests below for the custom-domain path.
+        when(tenantService.getTenantOrThrow(anyLong())).thenReturn(Tenant.builder().id(TENANT_ID).build());
         when(rateLimiterService.tryConsumeRedirectPermit(anyLong(), any()))
                 .thenReturn(new RateLimitResult(true, 99, 100, 0));
 
@@ -194,6 +205,42 @@ class UrlShortenerServiceImplTest {
         verifyNoInteractions(shortCodeGenerator);
     }
 
+    // ---------- createShortUrl: branded shortUrl (custom domain) ----------
+
+    @Test
+    void createShortUrl_tenantWithNoCustomDomain_usesPlatformDefaultHost() {
+        ShortenUrlRequest request = new ShortenUrlRequest("https://example.com", null, null);
+        when(repository.existsByShortCode(anyString())).thenReturn(false);
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> {
+            UrlMapping m = inv.getArgument(0);
+            m.setId(1L);
+            m.setCreatedAt(Instant.now());
+            return m;
+        });
+
+        ShortenUrlResponse response = service.createShortUrl(request, TENANT_ID);
+
+        assertThat(response.shortUrl()).isEqualTo("http://localhost:8080/aZ3kQ9m");
+    }
+
+    @Test
+    void createShortUrl_tenantWithCustomDomain_usesBrandedHost() {
+        when(tenantService.getTenantOrThrow(TENANT_ID))
+                .thenReturn(Tenant.builder().id(TENANT_ID).customDomain("go.acme.com").build());
+        ShortenUrlRequest request = new ShortenUrlRequest("https://example.com", null, null);
+        when(repository.existsByShortCode(anyString())).thenReturn(false);
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> {
+            UrlMapping m = inv.getArgument(0);
+            m.setId(1L);
+            m.setCreatedAt(Instant.now());
+            return m;
+        });
+
+        ShortenUrlResponse response = service.createShortUrl(request, TENANT_ID);
+
+        assertThat(response.shortUrl()).isEqualTo("https://go.acme.com/aZ3kQ9m");
+    }
+
     // ---------- resolveAndRecordHit ----------
 
     @Test
@@ -297,6 +344,125 @@ class UrlShortenerServiceImplTest {
         when(repository.findByShortCodeAndActiveTrueAndTenantId("missing", TENANT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.deactivate("missing", TENANT_ID))
+                .isInstanceOf(UrlNotFoundException.class);
+    }
+
+    // ---------- listMyUrls ----------
+
+    @Test
+    void listMyUrls_returnsTenantsOwnLinksIncludingInactive() {
+        UrlMapping active = UrlMapping.builder().shortCode("abc1234").originalUrl("https://example.com").active(true).clickCount(1).createdAt(Instant.now()).build();
+        UrlMapping inactive = UrlMapping.builder().shortCode("old1234").originalUrl("https://example.com/old").active(false).clickCount(9).createdAt(Instant.now()).build();
+        Pageable requested = PageRequest.of(0, 50);
+        when(repository.findByTenantId(eq(TENANT_ID), any())).thenReturn(new PageImpl<>(List.of(active, inactive), requested, 2));
+
+        PageResponse<UrlStatsResponse> result = service.listMyUrls(TENANT_ID, requested);
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content()).extracting(UrlStatsResponse::active).containsExactlyInAnyOrder(true, false);
+    }
+
+    // ---------- updateUrl ----------
+
+    @Test
+    void updateUrl_changesDestination_evictsCache() {
+        UrlMapping mapping = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("abc1234").originalUrl("https://old.example.com").active(true).build();
+        when(repository.findByShortCodeAndTenantId("abc1234", TENANT_ID)).thenReturn(Optional.of(mapping));
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UrlStatsResponse result = service.updateUrl("abc1234", TENANT_ID, new UpdateUrlRequest("https://new.example.com", null));
+
+        assertThat(result.originalUrl()).isEqualTo("https://new.example.com");
+        verify(cachedShortCodeLookup).evict("abc1234");
+    }
+
+    @Test
+    void updateUrl_changesExpiryOnly_leavesDestinationUntouched() {
+        Instant newExpiry = Instant.now().plus(30, ChronoUnit.DAYS);
+        UrlMapping mapping = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("abc1234").originalUrl("https://example.com").active(true).build();
+        when(repository.findByShortCodeAndTenantId("abc1234", TENANT_ID)).thenReturn(Optional.of(mapping));
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UrlStatsResponse result = service.updateUrl("abc1234", TENANT_ID, new UpdateUrlRequest(null, newExpiry));
+
+        assertThat(result.originalUrl()).isEqualTo("https://example.com");
+        assertThat(result.expiresAt()).isEqualTo(newExpiry);
+    }
+
+    @Test
+    void updateUrl_neitherFieldProvided_throwsInvalidUrl_beforeAnyLookup() {
+        assertThatThrownBy(() -> service.updateUrl("abc1234", TENANT_ID, new UpdateUrlRequest(null, null)))
+                .isInstanceOf(InvalidUrlException.class);
+
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void updateUrl_newDestinationFlaggedUnsafe_throwsInvalidUrl_doesNotSave() {
+        UrlMapping mapping = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("abc1234").originalUrl("https://example.com").active(true).build();
+        when(repository.findByShortCodeAndTenantId("abc1234", TENANT_ID)).thenReturn(Optional.of(mapping));
+        when(urlSafetyChecker.isSafe("https://malicious.example.com")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateUrl("abc1234", TENANT_ID, new UpdateUrlRequest("https://malicious.example.com", null)))
+                .isInstanceOf(InvalidUrlException.class);
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateUrl_unknownOrNotOwnedCode_throwsNotFound() {
+        when(repository.findByShortCodeAndTenantId("missing", TENANT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateUrl("missing", TENANT_ID, new UpdateUrlRequest("https://example.com", null)))
+                .isInstanceOf(UrlNotFoundException.class);
+    }
+
+    @Test
+    void updateUrl_deactivatedLink_canStillBeUpdated() {
+        // Editing a destination/expiry before reactivating is a legitimate
+        // sequence — update deliberately doesn't require active=true.
+        UrlMapping inactive = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("old1234").originalUrl("https://example.com").active(false).build();
+        when(repository.findByShortCodeAndTenantId("old1234", TENANT_ID)).thenReturn(Optional.of(inactive));
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UrlStatsResponse result = service.updateUrl("old1234", TENANT_ID, new UpdateUrlRequest("https://fixed.example.com", null));
+
+        assertThat(result.originalUrl()).isEqualTo("https://fixed.example.com");
+    }
+
+    // ---------- reactivate ----------
+
+    @Test
+    void reactivate_deactivatedLink_setsActiveTrue_noCacheEvictionNeeded() {
+        UrlMapping mapping = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("old1234").originalUrl("https://example.com").active(false).build();
+        when(repository.findByShortCodeAndTenantId("old1234", TENANT_ID)).thenReturn(Optional.of(mapping));
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UrlStatsResponse result = service.reactivate("old1234", TENANT_ID);
+
+        assertThat(result.active()).isTrue();
+        // A miss is never cached in the first place (CachedShortCodeLookup's
+        // `unless` clause) — nothing stale to evict for a code that was
+        // inactive a moment ago.
+        verifyNoInteractions(cachedShortCodeLookup);
+    }
+
+    @Test
+    void reactivate_alreadyActiveLink_isIdempotent() {
+        UrlMapping mapping = UrlMapping.builder().id(1L).tenantId(TENANT_ID).shortCode("abc1234").originalUrl("https://example.com").active(true).build();
+        when(repository.findByShortCodeAndTenantId("abc1234", TENANT_ID)).thenReturn(Optional.of(mapping));
+        when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UrlStatsResponse result = service.reactivate("abc1234", TENANT_ID);
+
+        assertThat(result.active()).isTrue();
+    }
+
+    @Test
+    void reactivate_unknownOrNotOwnedCode_throwsNotFound() {
+        when(repository.findByShortCodeAndTenantId("missing", TENANT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reactivate("missing", TENANT_ID))
                 .isInstanceOf(UrlNotFoundException.class);
     }
 }
