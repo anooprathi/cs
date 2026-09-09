@@ -451,8 +451,8 @@ exactly one genuine issue that only executing the system — not reading the dif
 | Java version | `21.0.4` (Oracle, LTS) |
 | Maven version | Apache Maven `3.9.9` |
 | Command run | `mvn verify` |
-| Test result | Tests run: 225, Failures: 0, Errors: 0, Skipped: 0 |
-| JaCoCo line coverage | 93.9% (932/993 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
+| Test result | Tests run: 236, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 93.9% (943/1,004 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
 | Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §14/RequiredProfileGuard); create → redirect → stats → deactivate/reactivate/update flow confirmed end-to-end |
 | Postman collection | The 92-request collection (62 test-scripts, 93 assertions), run via `newman run postman/url-shortener.postman_collection.json` against a freshly started instance: **0 failures**, after fixes made during each pass (below) |
 

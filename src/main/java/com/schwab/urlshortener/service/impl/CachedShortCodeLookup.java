@@ -33,9 +33,11 @@ import java.time.Instant;
  * never self-correct for a link created moments after the miss was cached.
  *
  * Invalidation: {@link #evict(String)} is called explicitly from
- * {@code UrlShortenerServiceImpl.deactivate} and from the scheduled expiry
- * sweep ({@code ExpiredUrlCleanupService}) — the two known write paths that
- * must take effect immediately. The 2-minute TTL on this cache (see
+ * {@code UrlShortenerServiceImpl.deactivate}, {@code
+ * UrlShortenerServiceImpl.updateUrl} (a changed destination/expiry must not
+ * keep resolving from a stale cache entry), and from the scheduled expiry
+ * sweep ({@code ExpiredUrlCleanupService}) — the three known write paths
+ * that must take effect immediately. The 2-minute TTL on this cache (see
  * {@link CacheConfig}) is the backstop for any other path, not the primary
  * invalidation mechanism.
  */

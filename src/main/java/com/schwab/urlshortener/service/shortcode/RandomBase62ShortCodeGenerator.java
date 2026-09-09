@@ -31,14 +31,23 @@ public class RandomBase62ShortCodeGenerator implements ShortCodeGenerator {
 
     @Override
     public String generateCandidate() {
-        // Build directly from the alphabet rather than encoding a random long,
-        // guaranteeing exactly CODE_LENGTH characters regardless of leading-zero digits.
-        long max = 1;
+        // Per-character nextInt(62), not nextDouble() * 62^10 fed through
+        // Base62Encoder.encode(long): 62^10 (~8.39 * 10^17) exceeds a
+        // double's 53-bit mantissa (~9.01 * 10^15), so scaling nextDouble()
+        // (itself only 53 bits of randomness) up to that range can't
+        // address every long value with equal probability — some values
+        // become unreachable and others land more often than others, a
+        // real non-uniformity in the code space, not just a style
+        // preference. Drawing each character independently from
+        // SecureRandom.nextInt(62) has no such range/precision mismatch —
+        // every character is uniform over the alphabet on its own — and
+        // it also drops the encode-then-zero-pad step entirely, since
+        // building CODE_LENGTH characters directly always yields exactly
+        // CODE_LENGTH characters.
+        StringBuilder sb = new StringBuilder(CODE_LENGTH);
         for (int i = 0; i < CODE_LENGTH; i++) {
-            max *= 62;
+            sb.append(Base62Encoder.ALPHABET.charAt(secureRandom.nextInt(62)));
         }
-        long value = (long) (secureRandom.nextDouble() * max);
-        String encoded = Base62Encoder.encode(value);
-        return "0".repeat(Math.max(0, CODE_LENGTH - encoded.length())) + encoded;
+        return sb.toString();
     }
 }

@@ -7,7 +7,7 @@ package com.schwab.urlshortener.util;
  */
 public final class Base62Encoder {
 
-    private static final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    public static final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int BASE = ALPHABET.length();
 
     private Base62Encoder() {

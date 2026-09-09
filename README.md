@@ -530,8 +530,8 @@ would have caught. Everything else passed clean on the first try both times.
 | Java version | `21.0.4` (Oracle, LTS) |
 | Maven version | Apache Maven `3.9.9` |
 | Command run | `mvn verify` (equivalent to `clean verify` for this purpose — no stale `target/` from a different commit was present) |
-| Test result | Tests run: 225, Failures: 0, Errors: 0, Skipped: 0 |
-| JaCoCo line coverage | 93.9% (932/993 lines) — clears the 0.80 gate with margin; see `target/site/jacoco/index.html` after running `mvn verify` for the full per-class breakdown |
+| Test result | Tests run: 236, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 93.9% (943/1,004 lines) — clears the 0.80 gate with margin; see `target/site/jacoco/index.html` after running `mvn verify` for the full per-class breakdown |
 | Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate/reactivate/update flow confirmed working end-to-end via both curl and the Postman collection below |
 | Postman collection | The full 92-request collection (62 test-scripts, 93 assertions) run via `newman run postman/url-shortener.postman_collection.json` against a freshly started dev instance: **0 failures** |
 
@@ -667,8 +667,6 @@ would be worse than naming them plainly.
   rate-limiting library) rather than the current two-command-plus-self-healing-check approach — functional
   and tested against the specific failure mode it targets, but a hand-rolled approximation of what a
   purpose-built library would guarantee more rigorously.
-- Cache short-code-to-URL mappings and tenant plan lookups — every redirect currently does a live DB lookup
-  for both; fine at prototype scale, a real bottleneck at high redirect volume.
 - Move click-count analytics off the synchronous hot-row `UPDATE` and toward batched/streamed aggregation —
   correct and race-free today, but a point contention risk under very high per-link traffic.
 - Change expired-link cleanup from "load every expired row, save them all" to a paged or bulk `UPDATE`, add
