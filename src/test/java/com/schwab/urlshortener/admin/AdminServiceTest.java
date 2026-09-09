@@ -183,6 +183,34 @@ class AdminServiceTest {
     }
 
     @Test
+    void listTenantUrls_noSortRequested_defaultsToCreatedAtDescending() {
+        when(tenantService.getTenantById(1L)).thenReturn(Tenant.builder().id(1L).name("acme").build());
+        Pageable unsorted = PageRequest.of(0, 50);
+        when(urlMappingRepository.findByTenantId(any(), any())).thenReturn(new PageImpl<>(List.of(), unsorted, 0));
+
+        adminService.listTenantUrls(1L, unsorted);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        org.mockito.Mockito.verify(urlMappingRepository).findByTenantId(org.mockito.ArgumentMatchers.eq(1L), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Test
+    void listTenantUrls_explicitSortRequested_isHonoredNotOverridden() {
+        // Regression test: this used to unconditionally override any
+        // caller-supplied sort with createdAt DESC, making ?sort= inoperable.
+        when(tenantService.getTenantById(1L)).thenReturn(Tenant.builder().id(1L).name("acme").build());
+        Pageable requestedSort = PageRequest.of(0, 50, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "clickCount"));
+        when(urlMappingRepository.findByTenantId(any(), any())).thenReturn(new PageImpl<>(List.of(), requestedSort, 0));
+
+        adminService.listTenantUrls(1L, requestedSort);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        org.mockito.Mockito.verify(urlMappingRepository).findByTenantId(org.mockito.ArgumentMatchers.eq(1L), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "clickCount"));
+    }
+
+    @Test
     void listTenantUrls_unknownTenant_throwsNotFound_beforeQueryingLinks() {
         when(tenantService.getTenantById(999L)).thenThrow(new TenantNotFoundException(999L));
 

@@ -347,6 +347,38 @@ class AdminIntegrationTest {
     }
 
     @Test
+    void listTenantUrls_explicitSortIsHonored_notOverriddenToCreatedAtDesc() throws Exception {
+        // Regression test: this endpoint used to unconditionally override
+        // any caller-supplied ?sort=, making it inoperable end-to-end, not
+        // just at the service-layer unit-test level.
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, tenantApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/z", "z-sort-link", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, tenantApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/a", "a-sort-link", null))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}/urls?sort=shortCode,asc", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].shortCode", is("a-sort-link")))
+                .andExpect(jsonPath("$.content[1].shortCode", is("z-sort-link")));
+    }
+
+    @Test
+    void listTenantUrls_invalidSortProperty_returns400NotA500() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}/urls?sort=%5B%22string%22%5D", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listTenantUrls_unknownTenant_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/admin/tenants/{id}/urls", 999999)
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))

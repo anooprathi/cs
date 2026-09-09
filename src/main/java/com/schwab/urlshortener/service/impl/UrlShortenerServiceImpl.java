@@ -253,11 +253,16 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<UrlStatsResponse> listMyUrls(Long tenantId, Pageable pageable) {
-        // Same createdAt-desc convention as AdminService.listTenantUrls — the
-        // caller supplies page/size, sort order is this service's call, not
-        // something every caller needs to know to ask for.
-        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                Sort.by(Sort.Direction.DESC, "createdAt"));
+        // Same createdAt-desc convention as AdminService.listTenantUrls — a
+        // caller who doesn't ask for a specific order gets newest-first
+        // without needing to know that's the default. An explicit ?sort=
+        // (e.g. clickCount,desc) is honored rather than overridden; a sort
+        // naming a property UrlMapping doesn't have is a clean 400
+        // (PropertyReferenceException, handled in GlobalExceptionHandler),
+        // not silently ignored or an opaque 500.
+        Pageable sorted = pageable.getSort().isSorted()
+                ? pageable
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<UrlStatsResponse> page = repository.findByTenantId(tenantId, sorted).map(mapper::toStatsResponse);
         return PageResponse.from(page);
     }

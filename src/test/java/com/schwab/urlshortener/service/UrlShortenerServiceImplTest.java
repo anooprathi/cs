@@ -362,6 +362,32 @@ class UrlShortenerServiceImplTest {
         assertThat(result.content()).extracting(UrlStatsResponse::active).containsExactlyInAnyOrder(true, false);
     }
 
+    @Test
+    void listMyUrls_noSortRequested_defaultsToCreatedAtDescending() {
+        Pageable unsorted = PageRequest.of(0, 50);
+        when(repository.findByTenantId(eq(TENANT_ID), any())).thenReturn(new PageImpl<>(List.of(), unsorted, 0));
+
+        service.listMyUrls(TENANT_ID, unsorted);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).findByTenantId(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Test
+    void listMyUrls_explicitSortRequested_isHonoredNotOverridden() {
+        // Regression test: this used to unconditionally override any
+        // caller-supplied sort with createdAt DESC, making ?sort= inoperable.
+        Pageable requestedSort = PageRequest.of(0, 50, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "clickCount"));
+        when(repository.findByTenantId(eq(TENANT_ID), any())).thenReturn(new PageImpl<>(List.of(), requestedSort, 0));
+
+        service.listMyUrls(TENANT_ID, requestedSort);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).findByTenantId(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "clickCount"));
+    }
+
     // ---------- updateUrl ----------
 
     @Test

@@ -378,6 +378,35 @@ class UrlShortenerIntegrationTest {
     }
 
     @Test
+    void listMyUrls_explicitSortIsHonored_notOverriddenToCreatedAtDesc() throws Exception {
+        // Regression test: this endpoint used to unconditionally override
+        // any caller-supplied ?sort=, making it inoperable end-to-end.
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/z", "z-my-sort", null))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/urls")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ShortenUrlRequest("https://www.schwab.com/a", "a-my-sort", null))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/urls?sort=shortCode,asc").header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].shortCode", is("a-my-sort")))
+                .andExpect(jsonPath("$.content[1].shortCode", is("z-my-sort")));
+    }
+
+    @Test
+    void listMyUrls_invalidSortProperty_returns400NotA500() throws Exception {
+        mockMvc.perform(get("/api/v1/urls?sort=%5B%22string%22%5D").header(ApiKeyAuthenticationFilter.API_KEY_HEADER, apiKey))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listMyUrls_withoutApiKey_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/urls"))
                 .andExpect(status().isUnauthorized());

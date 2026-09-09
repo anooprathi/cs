@@ -111,8 +111,15 @@ public class AdminService {
         // Sort applied here rather than baked into the repository method
         // name, so the same query supports paging without needing a
         // second near-duplicate method — see UrlMappingRepository.
-        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                Sort.by(Sort.Direction.DESC, "createdAt"));
+        // Defaults to createdAt DESC (newest first) when the caller
+        // doesn't specify a ?sort=, but honors an explicit one (e.g.
+        // ?sort=clickCount,desc) rather than always overriding it — a
+        // caller-supplied sort naming a property UrlMapping doesn't have
+        // still surfaces as a clean 400 (PropertyReferenceException,
+        // handled in GlobalExceptionHandler), not silently ignored or a 500.
+        Pageable sorted = pageable.getSort().isSorted()
+                ? pageable
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<AdminUrlSummaryResponse> page = urlMappingRepository.findByTenantId(tenantId, sorted)
                 .map(this::toUrlSummary);
