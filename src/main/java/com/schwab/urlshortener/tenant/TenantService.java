@@ -1,8 +1,11 @@
 package com.schwab.urlshortener.tenant;
 
+import com.schwab.urlshortener.config.CacheConfig;
 import com.schwab.urlshortener.exception.DuplicateTenantNameException;
 import com.schwab.urlshortener.exception.TenantNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -129,6 +132,7 @@ public class TenantService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.TENANT_PLANS, key = "#tenantId")
     public Tenant updatePlan(Long tenantId, RateLimitPlan newPlan) {
         Tenant tenant = getTenantById(tenantId);
         RateLimitPlan previous = tenant.getPlan();
@@ -138,6 +142,27 @@ public class TenantService {
         return saved;
     }
 
+    /**
+     * Cached lookup for the redirect hot path (see
+     * UrlShortenerServiceImpl.resolveAndRecordHit), which needs only the
+     * link OWNER's plan to pick their rate-limit tier — not the full
+     * Tenant record. Falls back to STANDARD for a tenant that's vanished
+     * (deleted between the link being created and this redirect), same as
+     * the un-cached lookup this replaced: fair-share protection degrading
+     * to the more conservative tier is safe, unlike defaulting open.
+     *
+     * Cache is bounded to 10 minutes (see CacheConfig) and explicitly
+     * evicted on {@link #updatePlan} — an admin plan change should not
+     * take up to 10 minutes to actually apply to redirect rate limiting.
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = CacheConfig.TENANT_PLANS, key = "#tenantId")
+    public RateLimitPlan getPlanForRateLimiting(Long tenantId) {
+        return repository.findById(tenantId)
+                .map(Tenant::getPlan)
+                .orElse(RateLimitPlan.STANDARD);
+    }
+
     @Transactional
     public Tenant updateActiveStatus(Long tenantId, boolean active) {
         Tenant tenant = getTenantById(tenantId);
@@ -145,5 +170,23 @@ public class TenantService {
         Tenant saved = repository.save(tenant);
         log.info("Admin set tenant {} active={}", tenantId, active);
         return saved;
+    }
+
+    /**
+     * Admin-triggered recovery for a lost API key: generates a fresh raw
+     * key, persists only its hash (same as {@link #register}), and
+     * immediately invalidates the old one — there is no window where both
+     * work. The tenant's identity, plan, links, and billing history are
+     * untouched; only the credential changes.
+     */
+    @Transactional
+    public TenantApiKeyRotationResult rotateApiKey(Long tenantId) {
+        Tenant tenant = getTenantById(tenantId);
+        String rawApiKey = ApiKeyGenerator.generate();
+        tenant.setApiKeyHash(ApiKeyGenerator.hash(rawApiKey));
+        Tenant saved = repository.save(tenant);
+        // Deliberately never log the raw key — only the fact that a rotation happened.
+        log.info("Admin rotated API key for tenant {}", tenantId);
+        return new TenantApiKeyRotationResult(saved, rawApiKey);
     }
 }

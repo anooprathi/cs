@@ -1441,7 +1441,7 @@
           }
         },
         {
-          "name": "403 - Root Path (no route defined, denyAll catchall)",
+          "name": "401 - Root Path (no route defined, denyAll catchall)",
           "event": [
             {
               "listen": "test",
@@ -1453,9 +1453,15 @@
                   "// (it was silently opening /actuator/metrics and /actuator/prometheus, not",
                   "// just harmless unmapped paths). With denyAll(), an unmatched route is now",
                   "// rejected by Security before it ever reaches the point where",
-                  "// NoResourceFoundException would produce a 404 -- so this is 403 now,",
-                  "// intentionally, not a regression.",
-                  "pm.test('status is 403 (denyAll catchall, not the old permitAll)', () => pm.response.to.have.status(403));"
+                  "// NoResourceFoundException would produce a 404. The status is 401, not 403:",
+                  "// this request carries no credential at all, so Spring Security's",
+                  "// ExceptionTranslationFilter treats the anonymous principal as needing to",
+                  "// authenticate first (AuthenticationEntryPoint, 401) rather than",
+                  "// authenticated-but-forbidden (AccessDeniedHandler, 403) -- see",
+                  "// UrlShortenerIntegrationTest#rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500",
+                  "// for the full reasoning and the case (a real-but-insufficient credential)",
+                  "// that does get 403.",
+                  "pm.test('status is 401 (denyAll catchall, anonymous caller)', () => pm.response.to.have.status(401));"
                 ]
               }
             }

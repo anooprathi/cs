@@ -218,7 +218,7 @@ class UrlShortenerIntegrationTest {
         // GET / matches no controller mapping (RedirectController's short-code
         // pattern requires 4-20 characters, so an empty path doesn't qualify).
         //
-        // This assertion changed from 404 to 403 when SecurityConfig's
+        // This assertion changed from 404 to 401 when SecurityConfig's
         // catchall changed from permitAll() to denyAll() (a production
         // review correctly flagged the old permitAll fallback as a real
         // security gap — see SecurityConfig's Javadoc). With denyAll(),
@@ -228,14 +228,23 @@ class UrlShortenerIntegrationTest {
         // GlobalExceptionHandler, and still exercised by
         // redirect_unknownShortCode_returns404 above for an unmatched
         // SHORT CODE specifically) never gets the chance to fire for a
-        // route this app has no matcher for at all. The actual thing this
+        // route this app has no matcher for at all. The status is 401, not
+        // 403: Spring Security's ExceptionTranslationFilter routes an
+        // AccessDeniedException to the AuthenticationEntryPoint (401)
+        // rather than the AccessDeniedHandler (403) whenever the current
+        // principal is anonymous — this request carries no credential at
+        // all, so it never gets far enough to be "authenticated but
+        // forbidden". A request presenting a real-but-insufficient
+        // credential against a denyAll/hasRole route does get 403 (see
+        // AdminIntegrationTest's wrong-key cases). The actual thing this
         // test protects against — a genuinely unmatched route surfacing as
         // an unhandled 500 — is still what's being verified; only the
-        // specific status code changed, and 403 is the more conservative,
-        // intentional choice per the security fix, not a regression.
+        // specific status code differs from the original (wrong)
+        // assumption, and 401 is still the conservative, intentional
+        // outcome of the security fix, not a regression.
         mockMvc.perform(get("/"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.status", is(403)));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status", is(401)));
     }
 
     @Test

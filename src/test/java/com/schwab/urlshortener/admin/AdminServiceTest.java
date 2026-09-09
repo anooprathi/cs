@@ -8,6 +8,7 @@ import com.schwab.urlshortener.exception.TenantNotFoundException;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
 import com.schwab.urlshortener.tenant.Tenant;
+import com.schwab.urlshortener.tenant.TenantApiKeyRotationResult;
 import com.schwab.urlshortener.tenant.TenantService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,28 @@ class AdminServiceTest {
         AdminTenantSummaryResponse result = adminService.updateStatus(1L, false);
 
         assertThat(result.active()).isFalse();
+    }
+
+    @Test
+    void rotateApiKey_delegatesToTenantServiceAndReturnsNewRawKey() {
+        Tenant tenant = Tenant.builder().id(1L).name("acme").plan(RateLimitPlan.STANDARD).active(true).createdAt(Instant.now()).build();
+        String rawKey = "usk_new-key";
+        when(tenantService.rotateApiKey(1L)).thenReturn(new TenantApiKeyRotationResult(tenant, rawKey));
+
+        AdminApiKeyRotationResponse result = adminService.rotateApiKey(1L);
+
+        assertThat(result.tenantId()).isEqualTo(1L);
+        assertThat(result.name()).isEqualTo("acme");
+        assertThat(result.apiKey()).isEqualTo(rawKey);
+        assertThat(result.rotatedAt()).isNotNull();
+    }
+
+    @Test
+    void rotateApiKey_unknownTenant_propagatesNotFound() {
+        when(tenantService.rotateApiKey(999L)).thenThrow(new TenantNotFoundException(999L));
+
+        assertThatThrownBy(() -> adminService.rotateApiKey(999L))
+                .isInstanceOf(TenantNotFoundException.class);
     }
 
     @Test

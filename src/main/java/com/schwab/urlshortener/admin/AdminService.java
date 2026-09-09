@@ -8,6 +8,7 @@ import com.schwab.urlshortener.entity.UrlMapping;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
 import com.schwab.urlshortener.tenant.Tenant;
+import com.schwab.urlshortener.tenant.TenantApiKeyRotationResult;
 import com.schwab.urlshortener.tenant.TenantService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +86,13 @@ public class AdminService {
     @Transactional
     public AdminTenantSummaryResponse updateStatus(Long tenantId, boolean active) {
         return toSummary(tenantService.updateActiveStatus(tenantId, active));
+    }
+
+    @Transactional
+    public AdminApiKeyRotationResponse rotateApiKey(Long tenantId) {
+        TenantApiKeyRotationResult result = tenantService.rotateApiKey(tenantId);
+        return new AdminApiKeyRotationResponse(
+                result.tenant().getId(), result.tenant().getName(), result.rawApiKey(), Instant.now());
     }
 
     @Transactional(readOnly = true)

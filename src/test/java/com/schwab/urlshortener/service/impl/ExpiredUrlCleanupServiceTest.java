@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -35,11 +36,14 @@ class ExpiredUrlCleanupServiceTest {
     @Mock
     private UrlMappingRepository repository;
 
+    @Mock
+    private CachedShortCodeLookup cachedShortCodeLookup;
+
     private ExpiredUrlCleanupService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExpiredUrlCleanupService(repository);
+        service = new ExpiredUrlCleanupService(repository, cachedShortCodeLookup);
     }
 
     @Test
@@ -49,6 +53,7 @@ class ExpiredUrlCleanupServiceTest {
         service.deactivateExpiredMappings();
 
         verify(repository, never()).saveAll(any());
+        verifyNoInteractions(cachedShortCodeLookup);
     }
 
     @Test
@@ -70,6 +75,9 @@ class ExpiredUrlCleanupServiceTest {
         ArgumentCaptor<List<UrlMapping>> captor = ArgumentCaptor.forClass(List.class);
         verify(repository).saveAll(captor.capture());
         assertThat(captor.getValue()).containsExactlyInAnyOrder(expired1, expired2);
+
+        verify(cachedShortCodeLookup).evict("abc1234");
+        verify(cachedShortCodeLookup).evict("def5678");
     }
 
     @Test

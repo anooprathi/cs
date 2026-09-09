@@ -97,6 +97,16 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- Spring's cache abstraction (@Cacheable/@CacheEvict) — pulls in
+             spring-context-support for CaffeineCacheManager. See CacheConfig,
+             which defines the app's caches (redirect lookups, tenant plans)
+             explicitly rather than relying on this starter's autoconfiguration,
+             since the two caches need different sizes/TTLs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
         <!-- OpenPDF: renders the downloadable invoice PDF (InvoicePdfGenerator).
              Actively-maintained LGPL/MPL fork of iText 4; package name
              com.lowagie.text is preserved for that lineage's compatibility. -->

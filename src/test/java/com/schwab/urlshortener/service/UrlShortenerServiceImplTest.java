@@ -13,11 +13,11 @@ import com.schwab.urlshortener.exception.UrlNotFoundException;
 import com.schwab.urlshortener.ratelimit.RateLimitResult;
 import com.schwab.urlshortener.ratelimit.TenantRateLimiterService;
 import com.schwab.urlshortener.repository.UrlMappingRepository;
+import com.schwab.urlshortener.service.impl.CachedShortCodeLookup;
 import com.schwab.urlshortener.service.impl.UrlMappingMapper;
 import com.schwab.urlshortener.service.impl.UrlShortenerServiceImpl;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
-import com.schwab.urlshortener.tenant.Tenant;
-import com.schwab.urlshortener.tenant.TenantRepository;
+import com.schwab.urlshortener.tenant.TenantService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,10 @@ class UrlShortenerServiceImplTest {
     private UrlMappingRepository repository;
 
     @Mock
-    private TenantRepository tenantRepository;
+    private TenantService tenantService;
+
+    @Mock
+    private CachedShortCodeLookup cachedShortCodeLookup;
 
     @Mock
     private UrlSafetyChecker urlSafetyChecker;
@@ -73,13 +76,12 @@ class UrlShortenerServiceImplTest {
     void setUp() {
         when(urlSafetyChecker.isSafe(anyString())).thenReturn(true);
         when(shortCodeGenerator.generateCandidate()).thenReturn("aZ3kQ9m");
-        when(tenantRepository.findById(anyLong()))
-                .thenReturn(Optional.of(Tenant.builder().id(TENANT_ID).plan(RateLimitPlan.STANDARD).build()));
+        when(tenantService.getPlanForRateLimiting(anyLong())).thenReturn(RateLimitPlan.STANDARD);
         when(rateLimiterService.tryConsumeRedirectPermit(anyLong(), any()))
                 .thenReturn(new RateLimitResult(true, 99, 100, 0));
 
-        service = new UrlShortenerServiceImpl(repository, tenantRepository, urlSafetyChecker, rateLimiterService,
-                usageMeteringService, shortCodeGenerator, mapper, new SimpleMeterRegistry());
+        service = new UrlShortenerServiceImpl(repository, tenantService, cachedShortCodeLookup, urlSafetyChecker,
+                rateLimiterService, usageMeteringService, shortCodeGenerator, mapper, new SimpleMeterRegistry());
         ReflectionTestUtils.setField(service, "baseUrl", "http://localhost:8080");
     }
 
@@ -196,10 +198,8 @@ class UrlShortenerServiceImplTest {
 
     @Test
     void resolveAndRecordHit_validActiveCode_returnsOriginalUrlAndIncrements() {
-        UrlMapping mapping = UrlMapping.builder()
-                .id(1L).tenantId(TENANT_ID).shortCode("abc1234").originalUrl("https://example.com")
-                .active(true).clickCount(5L).build();
-        when(repository.findByShortCodeAndActiveTrue("abc1234")).thenReturn(Optional.of(mapping));
+        when(cachedShortCodeLookup.findActive("abc1234"))
+                .thenReturn(new CachedShortCodeLookup.RedirectTarget(TENANT_ID, "https://example.com", null));
 
         String result = service.resolveAndRecordHit("abc1234");
 
@@ -210,7 +210,7 @@ class UrlShortenerServiceImplTest {
 
     @Test
     void resolveAndRecordHit_unknownCode_throwsNotFound() {
-        when(repository.findByShortCodeAndActiveTrue("missing")).thenReturn(Optional.empty());
+        when(cachedShortCodeLookup.findActive("missing")).thenReturn(null);
 
         assertThatThrownBy(() -> service.resolveAndRecordHit("missing"))
                 .isInstanceOf(UrlNotFoundException.class);
@@ -218,10 +218,8 @@ class UrlShortenerServiceImplTest {
 
     @Test
     void resolveAndRecordHit_expiredCode_throwsExpiredAndDoesNotIncrement() {
-        UrlMapping mapping = UrlMapping.builder()
-                .id(1L).tenantId(TENANT_ID).shortCode("old1234").originalUrl("https://example.com")
-                .active(true).expiresAt(Instant.now().minus(1, ChronoUnit.DAYS)).build();
-        when(repository.findByShortCodeAndActiveTrue("old1234")).thenReturn(Optional.of(mapping));
+        when(cachedShortCodeLookup.findActive("old1234")).thenReturn(new CachedShortCodeLookup.RedirectTarget(
+                TENANT_ID, "https://example.com", Instant.now().minus(1, ChronoUnit.DAYS)));
 
         assertThatThrownBy(() -> service.resolveAndRecordHit("old1234"))
                 .isInstanceOf(UrlExpiredException.class);
@@ -231,10 +229,8 @@ class UrlShortenerServiceImplTest {
 
     @Test
     void resolveAndRecordHit_ownerTenantRateLimited_throwsRateLimitExceededAndDoesNotIncrement() {
-        UrlMapping mapping = UrlMapping.builder()
-                .id(1L).tenantId(TENANT_ID).shortCode("hot1234").originalUrl("https://example.com")
-                .active(true).build();
-        when(repository.findByShortCodeAndActiveTrue("hot1234")).thenReturn(Optional.of(mapping));
+        when(cachedShortCodeLookup.findActive("hot1234"))
+                .thenReturn(new CachedShortCodeLookup.RedirectTarget(TENANT_ID, "https://example.com", null));
         when(rateLimiterService.tryConsumeRedirectPermit(eq(TENANT_ID), any()))
                 .thenReturn(new RateLimitResult(false, 0, 100, 30));
 
@@ -293,6 +289,7 @@ class UrlShortenerServiceImplTest {
 
         assertThat(mapping.isActive()).isFalse();
         verify(repository).save(mapping);
+        verify(cachedShortCodeLookup).evict("abc1234");
     }
 
     @Test

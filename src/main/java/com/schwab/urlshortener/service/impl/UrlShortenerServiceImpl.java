@@ -18,8 +18,7 @@ import com.schwab.urlshortener.service.ShortCodeGenerator;
 import com.schwab.urlshortener.service.UrlSafetyChecker;
 import com.schwab.urlshortener.service.UrlShortenerService;
 import com.schwab.urlshortener.tenant.RateLimitPlan;
-import com.schwab.urlshortener.tenant.Tenant;
-import com.schwab.urlshortener.tenant.TenantRepository;
+import com.schwab.urlshortener.tenant.TenantService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -48,7 +47,8 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
     private static final int MAX_GENERATION_ATTEMPTS = 5;
 
     private final UrlMappingRepository repository;
-    private final TenantRepository tenantRepository;
+    private final TenantService tenantService;
+    private final CachedShortCodeLookup cachedShortCodeLookup;
     private final UrlSafetyChecker urlSafetyChecker;
     private final TenantRateLimiterService rateLimiterService;
     private final UsageMeteringService usageMeteringService;
@@ -62,7 +62,8 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
     private String baseUrl;
 
     public UrlShortenerServiceImpl(UrlMappingRepository repository,
-                                    TenantRepository tenantRepository,
+                                    TenantService tenantService,
+                                    CachedShortCodeLookup cachedShortCodeLookup,
                                     UrlSafetyChecker urlSafetyChecker,
                                     TenantRateLimiterService rateLimiterService,
                                     UsageMeteringService usageMeteringService,
@@ -70,7 +71,8 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
                                     UrlMappingMapper mapper,
                                     MeterRegistry meterRegistry) {
         this.repository = repository;
-        this.tenantRepository = tenantRepository;
+        this.tenantService = tenantService;
+        this.cachedShortCodeLookup = cachedShortCodeLookup;
         this.urlSafetyChecker = urlSafetyChecker;
         this.rateLimiterService = rateLimiterService;
         this.usageMeteringService = usageMeteringService;
@@ -174,10 +176,12 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     private String doResolveAndRecordHit(String shortCode) {
-        UrlMapping mapping = repository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException(shortCode));
+        CachedShortCodeLookup.RedirectTarget target = cachedShortCodeLookup.findActive(shortCode);
+        if (target == null) {
+            throw new UrlNotFoundException(shortCode);
+        }
 
-        if (mapping.isExpired()) {
+        if (target.isExpired()) {
             log.info("Access attempt on expired short code: {}", shortCode);
             throw new UrlExpiredException(shortCode);
         }
@@ -186,11 +190,9 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
         // against the LINK OWNER's bucket (not the anonymous caller's — there is
         // no caller identity here), so one tenant's traffic spike on a viral link
         // cannot starve redirect capacity for other tenants' links.
-        RateLimitPlan ownerPlan = tenantRepository.findById(mapping.getTenantId())
-                .map(Tenant::getPlan)
-                .orElse(RateLimitPlan.STANDARD);
+        RateLimitPlan ownerPlan = tenantService.getPlanForRateLimiting(target.tenantId());
         RateLimitResult result =
-                rateLimiterService.tryConsumeRedirectPermit(mapping.getTenantId(), ownerPlan);
+                rateLimiterService.tryConsumeRedirectPermit(target.tenantId(), ownerPlan);
         if (!result.allowed()) {
             throw new RateLimitExceededException(
                     "This link's owner has exceeded its redirect rate limit. Please try again shortly.",
@@ -199,8 +201,8 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
 
         repository.incrementClickCount(shortCode, Instant.now());
         redirectsServedCounter.increment();
-        usageMeteringService.recordRedirect(mapping.getTenantId());
-        return mapping.getOriginalUrl();
+        usageMeteringService.recordRedirect(target.tenantId());
+        return target.originalUrl();
     }
 
     @Override
@@ -219,6 +221,7 @@ public class UrlShortenerServiceImpl implements UrlShortenerService {
                 .orElseThrow(() -> new UrlNotFoundException(shortCode));
         mapping.setActive(false);
         repository.save(mapping);
+        cachedShortCodeLookup.evict(shortCode);
         log.info("Deactivated short code: {} (tenantId={})", shortCode, tenantId);
     }
 

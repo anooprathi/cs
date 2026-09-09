@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -189,6 +190,37 @@ class AdminIntegrationTest {
         mockMvc.perform(get("/api/v1/tenants/me")
                         .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, tenantApiKey))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rotateApiKey_oldKeyStopsWorking_newKeyWorksImmediately() throws Exception {
+        String body = mockMvc.perform(post("/api/v1/admin/tenants/{id}/rotate-key", tenantId)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenantId", is((int) tenantId)))
+                .andExpect(jsonPath("$.apiKey", not(emptyOrNullString())))
+                .andReturn().getResponse().getContentAsString();
+        String newApiKey = objectMapper.readTree(body).get("apiKey").asText();
+
+        assertThat(newApiKey).isNotEqualTo(tenantApiKey);
+
+        // Old key is dead immediately — no overlap window.
+        mockMvc.perform(get("/api/v1/tenants/me")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, tenantApiKey))
+                .andExpect(status().isUnauthorized());
+
+        // New key authenticates as the same tenant.
+        mockMvc.perform(get("/api/v1/tenants/me")
+                        .header(ApiKeyAuthenticationFilter.API_KEY_HEADER, newApiKey))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenantId", is((int) tenantId)));
+    }
+
+    @Test
+    void rotateApiKey_unknownTenant_returns404() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/tenants/{id}/rotate-key", 999999)
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isNotFound());
     }
 
     @Test

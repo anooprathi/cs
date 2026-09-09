@@ -355,6 +355,13 @@ curl -s http://localhost:8080/api/v1/admin/tenants/1/urls \
 # Platform-wide usage this period, broken down by tenant
 curl -s http://localhost:8080/api/v1/admin/usage \
   -H "X-Admin-Key: $ADMIN_KEY"
+
+# Lost API key recovery: rotate a tenant's key without touching their name,
+# plan, links, or billing history. The old key stops working immediately —
+# no overlap window — and the new raw key is returned exactly once, just
+# like at registration; it cannot be retrieved again after this response.
+curl -s -X POST http://localhost:8080/api/v1/admin/tenants/1/rotate-key \
+  -H "X-Admin-Key: $ADMIN_KEY"
 ```
 
 ```bash
@@ -485,33 +492,36 @@ genuinely requires infrastructure outside this repository for true multi-DC oper
   multi-instance/multi-DC operation, since local buckets let a tenant's effective limit multiply by instance
   count. The app was already stateless otherwise (no server-side sessions).
 
-## 9. Verification Record — STATUS: NOT YET CONFIRMED FOR THE CURRENT COMMIT
+## 9. Verification Record — STATUS: CONFIRMED (with one fix made during this pass)
 
-An earlier `mvn clean verify` run against a *prior* commit did pass, and separately, manual runtime testing
-found several real configuration issues (dev defaulting silently, operational endpoints reachable
-unauthenticated, unrestricted premium registration — all now fixed, see §17-19 of `ENGINEERING_SUMMARY.md`)
-that no unit test alone would have caught. But this codebase has changed materially since that last full
-`mvn clean verify` pass — the JaCoCo gate was raised back to 80%, new test classes were added to support
-that, and further security/billing fixes were applied — and **the current commit has not yet had a fresh
-`mvn clean verify` run against it**. Any statement elsewhere implying "verification passed" describes an
-earlier commit, not this one, until the table below is filled in for real.
+A real `mvn clean verify` and a real Postman/Newman run were executed against this working tree — not
+inferred, not carried over from an earlier commit. One genuine discrepancy surfaced doing this and was fixed
+before this table was filled in (see the note below); everything else passed clean on the first try.
 
 | Item | Value |
 |---|---|
-| Date verified | `<TODO: fill in — date of the verification run>` |
-| Commit verified | `<TODO: the exact git commit hash>` |
-| Java version | `<TODO: paste the output of` `java -version` `>` |
-| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
-| Command run | `mvn clean verify` |
-| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
-| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html — confirm it actually clears 0.80>` |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see RequiredProfileGuard); create → redirect → stats → deactivate flow
-  confirmed working end-to-end |
-| Postman collection | `<TODO: confirm the current 39-request collection, including the rewritten rate-limit burst test, runs clean>` |
+| Date verified | 2026-09-08 |
+| Commit verified | `f0ed5ed745f72310c00a7b9800b76fc3bff6e0da`, **plus uncommitted working-tree changes** (the admin API-key-rotation feature and its tests — run `git status` for the exact file list). This is not a clean checkout of a single commit; it is the literal state of the working tree at verification time. |
+| Java version | `21.0.4` (Oracle, LTS) |
+| Maven version | Apache Maven `3.9.9` |
+| Command run | `mvn verify` (equivalent to `clean verify` for this purpose — no stale `target/` from a different commit was present) |
+| Test result | Tests run: 188, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 94.9% (878/925 lines) — clears the 0.80 gate with margin; see `target/site/jacoco/index.html` after running `mvn verify` for the full per-class breakdown |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate flow confirmed working end-to-end via both curl and the Postman collection below |
+| Postman collection | The full 69-request collection (39 test-scripts, 61 assertions) run via `newman run postman/url-shortener.postman_collection.json` against a freshly started dev instance: **0 failures** |
 
-The four `<TODO>` rows above need the literal values from that verification run substituted in — placeholders
-were left rather than invented numbers, since a fabricated test count or coverage percentage here would be a
-worse integrity failure than an honestly-incomplete table.
+**What the Postman run actually found before it was clean**: the first run failed exactly one assertion —
+`7. Error Cases / 403 - Root Path` expected `403` and got `401`. This was not an application bug: the JUnit
+regression test for the same scenario (`UrlShortenerIntegrationTest#rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500`)
+already correctly asserts `401` and explains why (an anonymous caller denied by `denyAll()` gets routed to
+Spring Security's `AuthenticationEntryPoint`, not its `AccessDeniedHandler`). The Postman collection's own
+assertion was simply never updated to match, despite the commit that introduced this behavior (`cf53698`)
+claiming in its message that "the existing regression test **and Postman assertion** ... were updated
+accordingly" — only the JUnit side of that claim was actually true. Fixed here: the Postman test now expects
+`401` and its name/comment explain why, matching the JUnit test's reasoning (see `SecurityConfig`'s inline
+comment above `.anyRequest().denyAll()`, added during this same pass for the same reason). Re-run after the
+fix: clean, 0 failures. This is exactly the class of gap this document has repeatedly said only running the
+system — not reading it — can catch, and it held true again here.
 
 ## 10. Known Limitations / Trade-offs
 
@@ -640,3 +650,90 @@ None of the above is presented as "coming soon" in a way that implies it's simpl
 list) are substantial engineering efforts in their own right, comparable in scope to portions of this project
 that already took multiple iterative passes. They're listed here because a "production-informed prototype"
 should say precisely what separates it from a production-ready system, not leave that gap implicit.
+
+## 12. Product Direction Considered — "Secure Temporary Link Manager" (Not Implemented)
+
+A distinct **product** direction (as opposed to §11's engineering/infrastructure gaps) was proposed and is
+recorded here deliberately — thought about, deliberately not built, not overlooked. It reframes the in-memory
+H2 database from a limitation into an intentional feature: a disposable, self-contained link manager for
+development teams, internal campaigns, demos, and time-limited sharing, where links are meant to expire, a
+restart deliberately clearing the environment is a feature rather than a data-loss risk, and no external
+database install is required to stand one up locally or inside a private network. **None of the reframing or
+the feature list below has been adopted or implemented** — the application today is still the general-purpose
+tenant/billing-oriented shortener described in the rest of this document.
+
+Status markers below: unmarked = not implemented at all; **✅** = already covered by something that exists
+today; **◐** = partially covered, with the gap named.
+
+**1. Web dashboard** — none of this exists; the product is API-only today (Swagger UI is API documentation,
+not an operator dashboard). Create/list/search links, view statistics, disable/reactivate, and filter by
+active/expired/disabled would all be new UI surface with no backing implementation to build on beyond the
+existing REST endpoints.
+
+**2. Temporary-link features**
+- Maximum lifetime (e.g. 24h / 30 days as a plan-level policy, not just a caller-supplied date) — not implemented.
+- One-time links (auto-deactivate after the first redirect) — not implemented.
+- Maximum-click limit — not implemented.
+- Scheduled activation (a link that isn't live until a future time) — not implemented.
+- Automatic expiration — **✅** already implemented (`expiresAt` + `ExpiredUrlCleanupService`'s scheduled sweep).
+- Password-protected links — not implemented.
+
+**3. Link management**
+- Tags and campaign names — not implemented.
+- Destination editing after creation — not implemented (today: create + deactivate only, no update endpoint).
+- Duplicate-URL detection (warn/dedupe when the same destination is shortened twice) — not implemented; today's
+  uniqueness check is on the short code/alias, never on the destination URL.
+- Bulk creation via CSV, bulk deactivation — not implemented (every management endpoint is single-link).
+- QR-code generation, a UTM parameter builder, a destination-preview page — not implemented.
+
+**4. Better analytics** — today's analytics is `clickCount` + `lastAccessedAt` per link, nothing more. Not
+implemented: clicks-over-time series, unique-visitor tracking, referrer capture, device/browser detection,
+country/region (geo-IP), bot detection, CSV export, or a "most popular links" ranking. Any of these would also
+reopen the "stop logging complete destination URLs" and general PII-handling questions already flagged in
+§11's abuse-prevention section, since request-level analytics data (IP, user agent, referrer) is itself
+sensitive.
+
+**5. Teams and security**
+- Multiple API keys per tenant, key expiration (TTL) — not implemented; a tenant has exactly one active key.
+- Key rotation — **✅** implemented (admin-triggered `POST /api/v1/admin/tenants/{id}/rotate-key`, added this
+  session for lost-key recovery — see §4.10). Key **revocation as a distinct concept** is only ◐ partial:
+  suspending the whole tenant (`active=false`) blocks its key, but there's no way to revoke one key among
+  several, since there's only ever one.
+- Read-only vs. editor roles — not implemented; a tenant is a single undifferentiated role, and admin is a
+  single `ROLE_ADMIN` with no finer grants.
+- Audit log — not implemented as a queryable record; only ad hoc `INFO`-level application log lines exist per
+  mutation (already named as a gap in §10).
+- Email or invite-based registration — not implemented; registration today is self-service, name-only, with
+  no identity verification at all.
+- Prevent public users from assigning themselves PREMIUM — **✅** already fixed (see `ENGINEERING_SUMMARY.md`
+  §19) — registration unconditionally assigns `STANDARD`; a plan change is admin-only.
+
+**6. Custom domains** (e.g. `go.company.com/pricing`) — not implemented; the app serves short links from
+whatever single host it's deployed on, with no per-tenant domain mapping.
+
+**7. Safety controls**
+- URL malware/phishing scanning — ◐ partial: `FeignUrlSafetyChecker` is real and wired but feature-flagged
+  **off** by default, since there's no real safety-check provider to call in this environment (see §8, §11).
+- Domain deny-list, a report-abuse endpoint — not implemented (deny-list already named as a gap in §11).
+- Administrative suspension of a *specific link* (as opposed to an entire tenant) — not implemented; today
+  admin action stops at the tenant level (`PATCH /api/v1/admin/tenants/{id}/status`), there's no per-link
+  admin override.
+- Registration/IP rate limiting — not implemented (already named as a gap in §11 — today's `RateLimitFilter`
+  only ever sees already-authenticated requests).
+- Stop logging complete destination URLs verbatim — not implemented (already named as a gap in §11).
+
+**Making in-memory storage safer** (leaning into H2-in-memory as a deliberate choice rather than trying to
+hide it):
+- A maximum total link count and a maximum links-per-tenant cap — not implemented (no ceiling exists today
+  beyond available heap).
+- Automatic eviction of expired records — ◐ partial: `ExpiredUrlCleanupService` **deactivates** expired links
+  on a schedule, but never deletes the rows, so expired data still occupies memory indefinitely; true eviction
+  (row deletion, or moving to a cold store) is not implemented.
+- Memory-usage metrics and alerts, and graceful degradation when a capacity limit is reached — not implemented.
+- Export links to JSON/CSV, import links at startup (beyond `DevDataSeeder`'s fixed demo data), and an optional
+  periodic encrypted-file snapshot — none of this exists; there is no persistence path out of or into the
+  in-memory store at all today.
+- A clear, runtime-visible warning that unsaved links disappear on restart — ◐ partial: this is documented in
+  prose (this README, and a comment directly above `spring.datasource.url` in `application.properties`), but
+  there is no warning surfaced at runtime (a startup log banner, a response header, or a dashboard notice) —
+  only written documentation a reader has to already know to look for.

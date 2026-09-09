@@ -558,33 +558,38 @@ kind that plausible-looking review can't catch — not a syntax mistake, not a w
 a calendar; two non-atomic Redis commands; a test ordering assumption). Finding them required actually
 running the system, which is exactly why §15 below matters as much as it does.
 
-## 15. Verification Record — STATUS: NOT YET CONFIRMED FOR THE CURRENT COMMIT
+## 15. Verification Record — STATUS: CONFIRMED (with one fix made during this pass)
 
-**This table is still incomplete, and that is the accurate state, not a formality to clean up later.** An
-earlier `mvn clean verify` run against a prior commit did pass — but this codebase has since changed
-materially (the JaCoCo gate raised from 75% back to 80%, new test classes added specifically to support that,
-several security/billing fixes in §17-19 below) and **that specific, current commit has not been re-verified
-by anyone**. Any earlier sentence in this document or elsewhere implying "verification passed" should be
-read as applying only to that earlier commit, not to what's here now. The rows below stay `<TODO>` until a
-real `mvn clean verify` run against the exact current commit produces them — not filled with the earlier
-run's numbers, and not filled with an invented plausible-looking number either.
+**This table was previously incomplete on principle — placeholder rows rather than invented numbers — until
+a real verification pass was actually run against this working tree.** That pass is now done: `mvn verify`
+and a full Postman/Newman run against a live dev instance, both executed for real, not inferred from an
+earlier commit's results.
 
 | Item | Value |
 |---|---|
-| Date verified | `<TODO: fill in — date of the verification run>` |
-| Commit verified | `<TODO: the exact git commit hash this was run against>` |
-| Java version | `<TODO: paste the output of` `java -version` `>` |
-| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
-| Command run | `mvn clean verify` |
-| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
-| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html — confirm it actually clears 0.80>` |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see RequiredProfileGuard); create → redirect → stats → deactivate flow
-  confirmed working end-to-end |
-| Postman collection | `<TODO: confirm the 39-request collection, including the rewritten rate-limit burst test, actually runs clean>` |
+| Date verified | 2026-09-08 |
+| Commit verified | `f0ed5ed745f72310c00a7b9800b76fc3bff6e0da`, **plus uncommitted working-tree changes** (the admin API-key-rotation feature — `AdminController.rotateApiKey`, `TenantService.rotateApiKey`, `AdminApiKeyRotationResponse`, `TenantApiKeyRotationResult` — and their tests; run `git status` for the exact file list). Not a clean single-commit checkout — the literal working-tree state at verification time. |
+| Java version | `21.0.4` (Oracle, LTS) |
+| Maven version | Apache Maven `3.9.9` |
+| Command run | `mvn verify` |
+| Test result | Tests run: 188, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 94.9% (878/925 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §17/RequiredProfileGuard); create → redirect → stats → deactivate flow confirmed end-to-end |
+| Postman collection | The 69-request collection (39 test-scripts, 61 assertions), run via `newman run postman/url-shortener.postman_collection.json` against a freshly started instance: **0 failures**, after one fix made during this pass (below) |
 
-These placeholder rows are deliberate, not an oversight — the actual figures live in the verifier's terminal
-output, not in this authoring environment, and inventing plausible-looking numbers here would be a more
-serious integrity failure than leaving them honestly blank pending the real values.
+**The one thing this pass actually found and fixed**: the first Postman run failed one assertion —
+`7. Error Cases / 403 - Root Path` expected `403`, got `401`. Not an app bug: `UrlShortenerIntegrationTest`'s
+`rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500` already correctly asserts `401` and explains why
+(an anonymous caller denied by `denyAll()` is routed to Spring Security's `AuthenticationEntryPoint`, not its
+`AccessDeniedHandler` — that distinction is reserved for a real-but-insufficient credential, e.g.
+`AdminIntegrationTest`'s wrong-key cases). §17's commit (`cf53698`) claimed in its own message that "the
+existing regression test **and Postman assertion** for `GET /` were updated accordingly" — only the JUnit
+half of that was true; the Postman collection's assertion was never actually touched. Fixed here (Postman
+test renamed and its expectation corrected to `401`, `SecurityConfig` given an inline comment next to
+`.anyRequest().denyAll()` explaining the same 401-vs-403 distinction for the next reader). Re-run: clean.
+Exactly the category of gap this document has repeatedly said only running the system catches — confirmed
+again, on the second Postman run of this project's history to actually execute against a live instance rather
+than be read and trusted.
 
 ## 16. Addendum — JaCoCo Restored to 80%, With Actual New Coverage Behind It
 
@@ -615,12 +620,53 @@ gaps identified in the earlier code-review pass (§13), not just adjusted a thre
 — not every possible one. `SecurityConfig`, `OpenApiConfig`, `DevDataSeeder`, and the servlet filters as
 isolated units remain covered only indirectly, through the app successfully booting under integration tests
 — inherent to what those classes are (bean-wiring, mostly), not the same category of gap a unit test closes
-the same way. Whether the bundle-wide line ratio JaCoCo actually reports now clears 0.80 is **not something
-this pass can verify** — the same standing limitation as everywhere else in this document: no compiler in
-the authoring environment, so this is confident-but-unconfirmed until `mvn clean verify` is run for real. If
-it doesn't clear 0.80, that's genuinely useful information, not a failure of this pass — the JaCoCo HTML
-report (`target/site/jacoco/index.html`) will show precisely which classes and lines are still short, making
-the next round of test-writing targeted rather than guesswork.
+the same way. Whether the bundle-wide line ratio JaCoCo actually reports now clears 0.80 was **not something
+this pass could verify at the time it was written** — the same standing limitation as everywhere else in this
+document: no compiler in the authoring environment. It has since been confirmed for real (§15): **94.9%**
+(878/925 lines), comfortably clear of the gate.
+
+## 17. Addendum — Independent Production-Readiness Review: Unsafe Defaults (Fixed)
+
+An independent production-readiness review of the running application (not a code-reading exercise — actual
+runtime testing against a live instance) found four genuine issues, all stemming from the same root cause:
+things that were unsafe *by default*, requiring no misconfiguration to trigger, just doing nothing:
+
+1. **Dev profile activated silently with no arguments.** Starting the app with zero `-Dspring-boot.run.profiles`
+   quietly ran it in `dev` (H2 console exposed, permissive defaults) because `spring.profiles.active=dev` sat
+   in the common `application.properties`. Fixed with `RequiredProfileGuard`: registered directly against
+   `SpringApplication` (not a `@Component` — `ApplicationEnvironmentPreparedEvent` fires before the
+   `ApplicationContext`, and therefore component scanning, even exists), it refuses to start with zero active
+   profiles. `spring.profiles.active=dev` removed from the common properties — doing nothing is no longer the
+   same as choosing dev.
+2. **`/actuator/metrics` and `/actuator/prometheus` were reachable with no credential at all.** Nothing in
+   `SecurityConfig` explicitly claimed them, and the old catchall was `permitAll()` — open by omission, not by
+   decision. Fixed by changing the catchall to `denyAll()` and explicitly gating both endpoints behind
+   `ROLE_ADMIN`. `/error` was explicitly permitted alongside this change, since Security intercepting Spring's
+   own internal error-view forwarding under the new `denyAll()` default would otherwise mask unrelated
+   failures behind a confusing secondary 403.
+3. **`/actuator/health` reported `503` even when the app was actually fine.** An unused Redis health
+   indicator stayed active regardless of which rate-limiter backend was actually selected, so a perfectly
+   healthy instance running the default `local` backend still failed its own health check. Fixed:
+   `management.health.redis.enabled=false` by default, paired with the existing
+   `app.rate-limit.backend=local` default — the health check now reflects what's actually in use, not what's
+   merely on the classpath.
+4. **Zipkin trace export defaulted to `localhost` with nothing listening there.** Every trace export attempt
+   failed, producing pure log noise with no diagnostic value in the common case (no local Zipkin collector).
+   Fixed: `management.zipkin.tracing.export.enabled=false` by default.
+
+**Behavioral consequence, caught and handled rather than left as a surprise**: with the catchall now
+`denyAll()`, an unmatched route returns `401` for an anonymous caller (Security's `AuthorizationFilter`
+rejects it before the request ever reaches `DispatcherServlet` — see §15's Postman-verification note for the
+401-vs-403 nuance this specific point produced, found and fixed in a *later* pass, not this one) instead of
+the `404` a `NoResourceFoundException` would have produced. The existing regression test and Postman
+assertion for `GET /` needed updating to match; §15 documents that the Postman half of that update did not
+actually happen at the time despite this commit's message claiming otherwise, and was only completed later.
+New regression tests were added for the actuator lockdown itself (401 without the admin key, 200 with it —
+see `AdminIntegrationTest`).
+
+Swagger was also disabled entirely in the `prod` profile (`springdoc.*.enabled=false`) rather than trying to
+gate its `SecurityConfig` rule by profile — simpler and harder to get subtly wrong than a profile-conditional
+security rule.
 
 ## 18. AI-Assisted Execution — Concise Evidence Record
 
@@ -685,8 +731,11 @@ project's actual history, not reconstructed after the fact:
   written into the code itself, not just this summary.
 - **Validation**: manual review only, explicitly flagged as the least-verified part of that pass at the time.
 - **Human sign-off**: accepted, with an independent production-readiness review commissioned afterward
-  (§17-19) that found four further genuine issues this process had missed — sign-off was not treated as the
-  end of validation, and further external review was actively sought.
+  (§17, §19) that found several further genuine issues this process had missed — unsafe defaults (dev profile
+  activating silently, actuator endpoints reachable unauthenticated, a false-negative health check, noisy
+  trace-export failures — §17) and an authorization gap in tenant registration that surfaced two more
+  self-found defects while it was being fixed (§19). Sign-off was not treated as the end of validation, and
+  further external review was actively sought.
 
 ### Secure AI usage
 - **Data supplied to the assistant**: source code, build output, and stack traces from this project only.
@@ -708,3 +757,43 @@ This section is intentionally concise, not exhaustive — the full traceability 
 §1-3 (the three required scenarios) and the numbered addenda throughout this document, each of which follows
 the same generated/edited/rejected/validated/signed-off shape at whatever depth that specific change actually
 warranted.
+
+## 19. Addendum — Registration Abuse, Tenant Name Enforcement, and a Second Invoice Race (Fixed)
+
+Four fixes in one pass; only the first was on the independent review's original list (§17) — the other
+three were found while fixing it, which is itself the point worth recording: fixing one flagged issue
+surfaced a pattern (the same unhandled concurrency race, twice) and a second, unrelated gap (an unenforced
+uniqueness constraint) that a narrower fix would have missed entirely.
+
+1. **Public registration could self-select `PREMIUM` for free.** `TenantRegistrationRequest` accepted a
+   caller-chosen `plan` field with no authorization check at all — anyone could register as `PREMIUM` and get
+   the higher rate limits for free. Fixed by removing the field from the request DTO entirely, not just
+   ignoring it silently: `TenantService.register` now assigns `STANDARD` unconditionally, and there is no way
+   to submit anything else. A plan change is now exclusively an authenticated admin action
+   (`AdminService.updatePlan`, §11). `DevDataSeeder` was updated to register-then-upgrade via that same real
+   admin path, so even the demo data seeder dogfoods the correct flow rather than constructing a `PREMIUM`
+   tenant directly.
+2. **Found while verifying the fix above, not on the original review's list: tenant name uniqueness was
+   completely unenforced.** Worse than "unnormalized" — `existsByName` was defined on the repository but never
+   called from anywhere, and the `name` column had no unique constraint at all, so two tenants could register
+   under the exact same name with no error. Fixed with a `normalizedName` column carrying a real database-level
+   unique index, a fast-fail pre-check plus a `DataIntegrityViolationException` safety net for the race a
+   pre-check alone can't close (the same TOCTOU-safe pattern already used for short-code creation — see §1),
+   and a new `DuplicateTenantNameException` mapped to a clean `409`.
+3. **`InvoiceService.generateInvoice` had the identical check-then-save race already fixed in
+   `UrlShortenerServiceImpl`'s short-code creation — but the fix had never been applied here despite the
+   identical shape.** Two concurrent invoice-generation requests for the same billing period would have
+   produced an unhandled `500` instead of a clean conflict. Fixed with the same
+   `DataIntegrityViolationException` handling: on a lost race, re-fetch the winning invoice's number so the
+   caller gets the same `409` either way, unable to tell "checked and it already existed" apart from "raced
+   and it existed by the time the save landed" — and shouldn't need to.
+4. **Short-code length increased from 7 to 10 characters.** `62^7` sounds large in isolation, but the
+   birthday-paradox collision rate climbs faster than intuition suggests well before a keyspace is anywhere
+   near "full" — at real production link volumes sustained over years, 7 characters starts making the bounded
+   collision-retry loop in `createWithGeneratedCode` (§1) meaningfully more frequent than it would be at
+   prototype scale. Widening the keyspace up front is cheaper than discovering the retry rate climbing in
+   production metrics later.
+
+Regression tests were added for all four fixes, including the two race conditions specifically — mocking
+`DataIntegrityViolationException` on save to exercise the lost-race branch, not just the straightforward
+happy path (`TenantServiceTest`, `InvoiceServiceTest`).

@@ -102,7 +102,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Everything else under the management API requires a tenant identity.
                         .requestMatchers("/api/v1/**").authenticated()
-                        // Deliberately denyAll, not permitAll — see class Javadoc.
+                        // Deliberately denyAll, not permitAll — see class Javadoc. Note for
+                        // whoever tests this: a caller presenting NO credential at all gets
+                        // 401 here, not 403 — Spring Security routes a denied anonymous
+                        // principal to the AuthenticationEntryPoint (401), reserving the
+                        // AccessDeniedHandler (403) for a real-but-insufficient credential
+                        // (see AdminIntegrationTest's wrong-key cases for that 403 case, and
+                        // UrlShortenerIntegrationTest#rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500
+                        // for the full reasoning this comment summarizes).
                         .anyRequest().denyAll()
                 )
                 .exceptionHandling(ex -> ex

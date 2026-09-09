@@ -1,6 +1,8 @@
 package com.schwab.urlshortener.admin;
 
+import com.schwab.urlshortener.config.OpenApiConfig;
 import com.schwab.urlshortener.dto.PageResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -17,9 +19,14 @@ import org.springframework.web.bind.annotation.*;
  * standard Spring paging query params (page, size, sort), defaulting to
  * 50 per page. Unpaginated "return everything" was fine for a demo
  * tenant count; it would not have held up as either list grew.
+ *
+ * @SecurityRequirement here overrides (rather than adds to) the global
+ * ApiKeyAuth requirement from OpenApiConfig, so Swagger UI's "Try it out"
+ * sends X-Admin-Key for these endpoints instead of the tenant X-API-Key.
  */
 @RestController
 @RequestMapping("/api/v1/admin")
+@SecurityRequirement(name = OpenApiConfig.ADMIN_KEY_SCHEME)
 public class AdminController {
 
     private final AdminService adminService;
@@ -55,6 +62,15 @@ public class AdminController {
     public ResponseEntity<AdminTenantSummaryResponse> updateStatus(@PathVariable Long tenantId,
                                                                      @Valid @RequestBody AdminUpdateStatusRequest request) {
         return ResponseEntity.ok(adminService.updateStatus(tenantId, request.active()));
+    }
+
+    /** Rotates a tenant's API key when the original is lost — the old key
+     *  stops working immediately (no overlap window). The new raw key is
+     *  returned exactly once, mirroring registration (TenantService.register);
+     *  it is never retrievable again after this response. */
+    @PostMapping("/tenants/{tenantId}/rotate-key")
+    public ResponseEntity<AdminApiKeyRotationResponse> rotateApiKey(@PathVariable Long tenantId) {
+        return ResponseEntity.ok(adminService.rotateApiKey(tenantId));
     }
 
     /** Every link a given tenant has ever created, active or not. */
