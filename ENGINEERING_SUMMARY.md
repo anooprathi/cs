@@ -558,38 +558,53 @@ kind that plausible-looking review can't catch — not a syntax mistake, not a w
 a calendar; two non-atomic Redis commands; a test ordering assumption). Finding them required actually
 running the system, which is exactly why §15 below matters as much as it does.
 
-## 15. Verification Record — STATUS: CONFIRMED (with one fix made during this pass)
+## 15. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
 
 **This table was previously incomplete on principle — placeholder rows rather than invented numbers — until
-a real verification pass was actually run against this working tree.** That pass is now done: `mvn verify`
-and a full Postman/Newman run against a live dev instance, both executed for real, not inferred from an
-earlier commit's results.
+a real verification pass was actually run against this working tree.** Two passes are recorded below, each
+run for real against a live dev instance, neither inferred from an earlier commit's results. Each pass found
+exactly one genuine issue that only executing the system — not reading the diff — surfaced.
 
 | Item | Value |
 |---|---|
-| Date verified | 2026-09-08 |
-| Commit verified | `f0ed5ed745f72310c00a7b9800b76fc3bff6e0da`, **plus uncommitted working-tree changes** (the admin API-key-rotation feature — `AdminController.rotateApiKey`, `TenantService.rotateApiKey`, `AdminApiKeyRotationResponse`, `TenantApiKeyRotationResult` — and their tests; run `git status` for the exact file list). Not a clean single-commit checkout — the literal working-tree state at verification time. |
+| Date verified | 2026-09-09 (second pass, after adding tenant link-management + custom-domain endpoints and extending the Postman collection to cover them; first pass was 2026-09-08) |
+| Commit verified | `35e6edd700be5b5b0844d93495b44fa63f23eebe`, **plus one uncommitted file** (`postman/url-shortener.postman_collection.json`, the collection extension this second pass verifies — run `git status` for the exact state). Not a clean single-commit checkout — the literal working-tree state at verification time. |
 | Java version | `21.0.4` (Oracle, LTS) |
 | Maven version | Apache Maven `3.9.9` |
 | Command run | `mvn verify` |
-| Test result | Tests run: 188, Failures: 0, Errors: 0, Skipped: 0 |
-| JaCoCo line coverage | 94.9% (878/925 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §17/RequiredProfileGuard); create → redirect → stats → deactivate flow confirmed end-to-end |
-| Postman collection | The 69-request collection (39 test-scripts, 61 assertions), run via `newman run postman/url-shortener.postman_collection.json` against a freshly started instance: **0 failures**, after one fix made during this pass (below) |
+| Test result | Tests run: 225, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 93.9% (932/993 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §17/RequiredProfileGuard); create → redirect → stats → deactivate/reactivate/update flow confirmed end-to-end |
+| Postman collection | The 92-request collection (62 test-scripts, 93 assertions), run via `newman run postman/url-shortener.postman_collection.json` against a freshly started instance: **0 failures**, after fixes made during each pass (below) |
 
-**The one thing this pass actually found and fixed**: the first Postman run failed one assertion —
+**Pass 1 (2026-09-08) found**: the first Postman run failed one assertion —
 `7. Error Cases / 403 - Root Path` expected `403`, got `401`. Not an app bug: `UrlShortenerIntegrationTest`'s
 `rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500` already correctly asserts `401` and explains why
 (an anonymous caller denied by `denyAll()` is routed to Spring Security's `AuthenticationEntryPoint`, not its
 `AccessDeniedHandler` — that distinction is reserved for a real-but-insufficient credential, e.g.
 `AdminIntegrationTest`'s wrong-key cases). §17's commit (`cf53698`) claimed in its own message that "the
 existing regression test **and Postman assertion** for `GET /` were updated accordingly" — only the JUnit
-half of that was true; the Postman collection's assertion was never actually touched. Fixed here (Postman
-test renamed and its expectation corrected to `401`, `SecurityConfig` given an inline comment next to
-`.anyRequest().denyAll()` explaining the same 401-vs-403 distinction for the next reader). Re-run: clean.
-Exactly the category of gap this document has repeatedly said only running the system catches — confirmed
-again, on the second Postman run of this project's history to actually execute against a live instance rather
-than be read and trusted.
+half of that was true; the Postman collection's assertion was never actually touched. Fixed: Postman test
+renamed and its expectation corrected to `401`, `SecurityConfig` given an inline comment next to
+`.anyRequest().denyAll()` explaining the same 401-vs-403 distinction for the next reader.
+
+**Pass 2 (2026-09-09) found two things**, both while extending the collection with `3a. Link Management` and
+`6a. Admin Extensions` folders for this session's new endpoints:
+1. Placed after `7. Error Cases`'s rate-limit burst test, the new folders inherited an already-exhausted
+   STANDARD-plan bucket — pure 429s. Fixed by moving both folders earlier and giving them a dedicated third
+   tenant (`apiKey3`/`tenantId3`) so they never compete with tenant 1's carefully-tuned rate-limit budget
+   (the burst test relies on tenant 1 having accumulated ~19 prior uses before it runs).
+2. The rotate-key demo's test script referenced the collection variable as a bare JS string —
+   `pm.collectionVariables.get('apiKey')` — not `{{apiKey}}` template syntax, so a mechanical find/replace
+   across the JSON missed it and silently corrupted tenant 1's `apiKey` variable mid-run. This didn't fail
+   where it happened; it surfaced several requests later as an unrelated-looking failure
+   (`409 - Duplicate Invoice` unexpectedly returning `201`) — exactly the action-at-a-distance shape that a
+   diff review would not have caught, only full execution did. Fixed by renaming the script's variable
+   references to `'apiKey3'`.
+
+Re-run after each pass's fixes: clean, both times. Exactly the category of gap this document has repeatedly
+said only running the system catches — confirmed twice now, on the only two Postman runs in this project's
+history to actually execute against a live instance rather than be read and trusted.
 
 ## 16. Addendum — JaCoCo Restored to 80%, With Actual New Coverage Behind It
 

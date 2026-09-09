@@ -547,34 +547,53 @@ genuinely requires infrastructure outside this repository for true multi-DC oper
   multi-instance/multi-DC operation, since local buckets let a tenant's effective limit multiply by instance
   count. The app was already stateless otherwise (no server-side sessions).
 
-## 9. Verification Record — STATUS: CONFIRMED (with one fix made during this pass)
+## 9. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
 
 A real `mvn clean verify` and a real Postman/Newman run were executed against this working tree — not
-inferred, not carried over from an earlier commit. One genuine discrepancy surfaced doing this and was fixed
-before this table was filled in (see the note below); everything else passed clean on the first try.
+inferred, not carried over from an earlier commit. Two separate verification passes are recorded here, each
+of which found exactly one genuine, non-obvious discrepancy that only running the system (not reading it)
+would have caught. Everything else passed clean on the first try both times.
 
 | Item | Value |
 |---|---|
-| Date verified | 2026-09-08 |
-| Commit verified | `f0ed5ed745f72310c00a7b9800b76fc3bff6e0da`, **plus uncommitted working-tree changes** (the admin API-key-rotation feature and its tests — run `git status` for the exact file list). This is not a clean checkout of a single commit; it is the literal state of the working tree at verification time. |
+| Date verified | 2026-09-09 (second pass, after adding tenant link-management + custom-domain endpoints and their Postman coverage; first pass was 2026-09-08) |
+| Commit verified | `35e6edd700be5b5b0844d93495b44fa63f23eebe`, **plus one uncommitted file** (`postman/url-shortener.postman_collection.json` — the collection additions this second pass verifies; run `git status` for the exact state). Not a clean single-commit checkout — the literal working-tree state at verification time. |
 | Java version | `21.0.4` (Oracle, LTS) |
 | Maven version | Apache Maven `3.9.9` |
 | Command run | `mvn verify` (equivalent to `clean verify` for this purpose — no stale `target/` from a different commit was present) |
-| Test result | Tests run: 188, Failures: 0, Errors: 0, Skipped: 0 |
-| JaCoCo line coverage | 94.9% (878/925 lines) — clears the 0.80 gate with margin; see `target/site/jacoco/index.html` after running `mvn verify` for the full per-class breakdown |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate flow confirmed working end-to-end via both curl and the Postman collection below |
-| Postman collection | The full 69-request collection (39 test-scripts, 61 assertions) run via `newman run postman/url-shortener.postman_collection.json` against a freshly started dev instance: **0 failures** |
+| Test result | Tests run: 225, Failures: 0, Errors: 0, Skipped: 0 |
+| JaCoCo line coverage | 93.9% (932/993 lines) — clears the 0.80 gate with margin; see `target/site/jacoco/index.html` after running `mvn verify` for the full per-class breakdown |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate/reactivate/update flow confirmed working end-to-end via both curl and the Postman collection below |
+| Postman collection | The full 92-request collection (62 test-scripts, 93 assertions) run via `newman run postman/url-shortener.postman_collection.json` against a freshly started dev instance: **0 failures** |
 
-**What the Postman run actually found before it was clean**: the first run failed exactly one assertion —
-`7. Error Cases / 403 - Root Path` expected `403` and got `401`. This was not an application bug: the JUnit
-regression test for the same scenario (`UrlShortenerIntegrationTest#rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500`)
-already correctly asserts `401` and explains why (an anonymous caller denied by `denyAll()` gets routed to
-Spring Security's `AuthenticationEntryPoint`, not its `AccessDeniedHandler`). The Postman collection's own
-assertion was simply never updated to match, despite the commit that introduced this behavior (`cf53698`)
-claiming in its message that "the existing regression test **and Postman assertion** ... were updated
-accordingly" — only the JUnit side of that claim was actually true. Fixed here: the Postman test now expects
-`401` and its name/comment explain why, matching the JUnit test's reasoning (see `SecurityConfig`'s inline
-comment above `.anyRequest().denyAll()`, added during this same pass for the same reason). Re-run after the
+**Pass 1 (2026-09-08) found**: `7. Error Cases / 403 - Root Path` expected `403` and got `401`. Not an
+application bug — the JUnit regression test for the same scenario
+(`UrlShortenerIntegrationTest#rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500`) already correctly
+asserts `401` and explains why (an anonymous caller denied by `denyAll()` gets routed to Spring Security's
+`AuthenticationEntryPoint`, not its `AccessDeniedHandler`). The Postman assertion was simply never updated to
+match, despite the commit introducing this behavior (`cf53698`) claiming in its message that "the existing
+regression test **and Postman assertion** ... were updated accordingly" — only the JUnit half was true. Fixed:
+the Postman test now expects `401`, matching `SecurityConfig`'s inline comment above `.anyRequest().denyAll()`
+added the same pass.
+
+**Pass 2 (2026-09-09) found**: adding two new Postman folders (`3a. Link Management`, `6a. Admin Extensions`)
+for the session's new tenant self-service and custom-domain endpoints initially broke the collection two
+different ways, both caught by actually running it, neither visible from reading the JSON:
+1. Placing the new folders after `7. Error Cases`'s rate-limit burst test meant every new request inherited
+   an already-exhausted STANDARD-plan bucket (20 api-calls/min) — pure 429s throughout. Fixed by moving both
+   folders earlier (`3a` after `3. Redirect`, `6a` after `6. Admin`) and, more robustly, giving them their own
+   dedicated third tenant (`apiKey3`/`tenantId3`) so they never compete with tenant 1's carefully-tuned
+   ~19-prior-uses-before-the-burst budget at all.
+2. The rotate-key demo's test script read/wrote the collection variable named literally `'apiKey'` in its JS
+   (`pm.collectionVariables.get('apiKey')`), not the templated `{{apiKey}}` reference a text search would
+   normally catch — a mechanical find/replace across the JSON missed it because it isn't `{{apiKey}}` syntax,
+   it's a bare string argument to `pm.collectionVariables.get(...)`. This silently corrupted tenant 1's
+   `apiKey` variable mid-run (overwriting it with tenant 3's rotated key), which only surfaced as a downstream
+   failure several requests later (`7. Error Cases / 409 - Duplicate Invoice` unexpectedly returned `201`)
+   — exactly the kind of action-at-a-distance bug that's easy to miss reading the diff and only shows up when
+   the whole sequence actually executes. Fixed by renaming that script's variable references to `'apiKey3'`.
+
+Re-run after both fixes: clean, both times.
 fix: clean, 0 failures. This is exactly the class of gap this document has repeatedly said only running the
 system — not reading it — can catch, and it held true again here.
 

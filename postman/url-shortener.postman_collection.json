@@ -54,6 +54,26 @@
       "key": "rateLimitObserved",
       "value": "false",
       "type": "string"
+    },
+    {
+      "key": "demoShortCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "apiKey3",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantId3",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "oldApiKey3BeforeRotation",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -144,6 +164,49 @@
               ]
             },
             "description": "A second, independent tenant \u2014 used by the cross-tenant 404 test and to demonstrate that rate limiting is per-tenant, not global."
+          }
+        },
+        {
+          "name": "Register Third Tenant (dedicated to link-management + admin-extension demos, to stay off the rate-limit budget tuned for tenant 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('apiKey3', body.apiKey);",
+                  "pm.collectionVariables.set('tenantId3', String(body.tenantId));",
+                  "console.log('Saved apiKey3 and tenantId3:', body.apiKey, body.tenantId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"link-mgmt-demo-tenant\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants"
+              ]
+            },
+            "description": "Sections '3a' and '6a' below (added for this session's new endpoints) run their tenant-authenticated calls against THIS tenant, not {{apiKey}} -- tenant 1's api-rate-limit budget is deliberately tuned to end up at exactly ~19 uses right before the '7. Error Cases' burst test crosses its 20/min STANDARD limit. Adding more {{apiKey}}-authenticated calls earlier in the run would exhaust that budget before the burst test even starts."
           }
         }
       ]
@@ -593,6 +656,414 @@
               ]
             },
             "description": "The actual proof of deactivation behavior \u2014 DELETE returning 204 only proves the request was accepted, not that the link stopped working. This confirms it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3a. Link Management (list, update, reactivate)",
+      "item": [
+        {
+          "name": "POST Create Short URL (for update/reactivate demo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('demoShortCode', body.shortCode);",
+                  "console.log('Saved demoShortCode:', body.shortCode);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/link-mgmt-demo\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "description": "A dedicated link for this folder, separate from {{shortCode}} -- keeps the update/deactivate/reactivate lifecycle below from disturbing the destination-URL assertions folders 2-3 rely on."
+          }
+        },
+        {
+          "name": "GET List My URLs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "description": "Paginated -- {content, page, size, totalElements, totalPages}, same envelope as the admin listing endpoints. Includes every link this tenant has created, active or not."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('the just-created demo link is in the list', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('content');",
+                  "    const codes = body.content.map(u => u.shortCode);",
+                  "    pm.expect(codes).to.include(pm.collectionVariables.get('demoShortCode'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Update Destination",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/link-mgmt-demo-updated\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{demoShortCode}}"
+              ]
+            },
+            "description": "Re-validated through the same safety checker as creation, and evicts the redirect cache so the change is visible immediately -- confirmed later in this folder by 'GET Redirect After Reactivate' resolving to this UPDATED destination, not the original one."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('originalUrl reflects the update', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.originalUrl).to.eql('https://www.schwab.com/link-mgmt-demo-updated');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Update Expiry",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expiresAt\": \"2027-01-01T00:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{demoShortCode}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('expiresAt reflects the update, destination from the previous request is untouched', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.expiresAt).to.eql('2027-01-01T00:00:00Z');",
+                  "    pm.expect(body.originalUrl).to.eql('https://www.schwab.com/link-mgmt-demo-updated');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Update With Neither Field Provided",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{demoShortCode}}"
+              ]
+            },
+            "description": "At least one of originalUrl/expiresAt is required -- an empty partial update is rejected rather than silently accepted as a no-op."
+          }
+        },
+        {
+          "name": "DELETE Deactivate (for reactivate demo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{demoShortCode}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Redirect After Deactivate (confirms it's gone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{demoShortCode}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Reactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('active is true again', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.active).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{demoShortCode}}/reactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{demoShortCode}}",
+                "reactivate"
+              ]
+            },
+            "description": "Idempotent if already active. Undoes the deactivation above -- no separate un-delete/recreate needed, and no click history is lost."
+          }
+        },
+        {
+          "name": "GET Redirect After Reactivate (confirms updated destination, not the original)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 302 (raw redirect, not followed)', () => pm.response.to.have.status(302));",
+                  "pm.test('Location is the UPDATED destination from earlier in this folder', () => {",
+                  "    pm.expect(pm.response.headers.get('Location')).to.eql('https://www.schwab.com/link-mgmt-demo-updated');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{demoShortCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{demoShortCode}}"
+              ]
+            },
+            "description": "Ties update + reactivate together: proves reactivate brought back the link with the EDITED destination, not a stale/original one."
+          }
+        },
+        {
+          "name": "404 - Reactivate Unknown Short Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/doesNotExist2/reactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "doesNotExist2",
+                "reactivate"
+              ]
+            }
           }
         }
       ]
@@ -1303,6 +1774,541 @@
               ]
             },
             "description": "A valid tenant key is a real credential, just the wrong role \u2014 403, not 401."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6a. Admin Extensions (key rotation, custom domain)",
+      "item": [
+        {
+          "name": "POST Rotate Tenant API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('new apiKey is a real, different key', () => {",
+                  "    pm.expect(body.apiKey).to.be.a('string').and.not.eql('');",
+                  "    pm.expect(body.apiKey).to.not.eql(pm.collectionVariables.get('apiKey3'));",
+                  "});",
+                  "// Save the OLD key before overwriting {{apiKey3}} -- the next request",
+                  "// proves it stops working immediately, no overlap window.",
+                  "pm.collectionVariables.set('oldApiKey3BeforeRotation', pm.collectionVariables.get('apiKey3'));",
+                  "pm.collectionVariables.set('apiKey3', body.apiKey);",
+                  "console.log('Rotated apiKey3 for tenantId3', body.tenantId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId3}}/rotate-key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId3}}",
+                "rotate-key"
+              ]
+            },
+            "description": "Lost-key recovery. The new raw key is returned exactly once, like at registration -- this request saves it into {{apiKey3}} so every request AFTER this one in the collection keeps working with the new key."
+          }
+        },
+        {
+          "name": "401 - Old API Key Stops Working Immediately",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{oldApiKey3BeforeRotation}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me"
+              ]
+            },
+            "description": "No overlap window -- the key that was valid one request ago is now rejected."
+          }
+        },
+        {
+          "name": "GET Me (new key works)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "404 - Rotate Key for Unknown Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/999999/rotate-key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "999999",
+                "rotate-key"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Set Tenant Custom Domain",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('customDomain is set', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.customDomain).to.eql('go.acme-postman-test.com');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": \"go.acme-postman-test.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId3}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId3}}",
+                "domain"
+              ]
+            },
+            "description": "Application-level association only -- does NOT provision DNS or a TLS certificate for this domain (see README \u00a712 'Custom domains'). Enforced unique across tenants -- see the 409 test below."
+          }
+        },
+        {
+          "name": "POST Create Short URL (branded by the new custom domain)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('shortUrl uses the tenant\\'s custom domain, not the platform default', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.shortUrl).to.match(/^https:\\/\\/go\\.acme-postman-test\\.com\\//);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey3}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalUrl\": \"https://www.schwab.com/branded-demo\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Set Domain on Tenant2 (setup for the 409 test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": \"go.taken-postman-test.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId2}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId2}}",
+                "domain"
+              ]
+            },
+            "description": "Run '0. Setup > Register Second Tenant' first."
+          }
+        },
+        {
+          "name": "409 - Custom Domain Already Claimed by Another Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": \"go.taken-postman-test.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId3}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId3}}",
+                "domain"
+              ]
+            },
+            "description": "Tenant2 already claimed this domain in the previous request -- a different tenant claiming the exact same one is a conflict, not silently allowed."
+          }
+        },
+        {
+          "name": "400 - Invalid Custom Domain Format",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": \"https://go.acme.com/path\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId3}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId3}}",
+                "domain"
+              ]
+            },
+            "description": "customDomain must be a bare hostname -- no scheme, path, or port."
+          }
+        },
+        {
+          "name": "404 - Update Domain for Unknown Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": \"go.nope.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/999999/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "999999",
+                "domain"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Clear Tenant Custom Domain (cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('customDomain is cleared', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.customDomain).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId3}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId3}}",
+                "domain"
+              ]
+            },
+            "description": "customDomain: null reverts to the platform default host -- leaves the environment clean for a re-run."
+          }
+        },
+        {
+          "name": "PATCH Clear Tenant2 Custom Domain (cleanup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customDomain\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tenants/{{tenantId2}}/domain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tenants",
+                "{{tenantId2}}",
+                "domain"
+              ]
+            }
           }
         }
       ]
