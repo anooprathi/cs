@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -111,10 +113,27 @@ public class GlobalExceptionHandler {
      * ["string"], which no entity has) -> 400. Without this handler it
      * falls through to the generic Exception.class catch-all below as an
      * opaque 500 -- this is ordinary bad client input, not a server fault.
+     *
+     * The message lists every actual sortable property on the target
+     * entity (via reflection on {@link PropertyReferenceException#getType()},
+     * the entity Spring Data was trying to sort), rather than just naming
+     * the bad value and leaving the caller to guess or read source code —
+     * that list is what a caller actually needs to self-correct, and this
+     * is also the answer to "what sort values are valid here": submit any
+     * invalid one and the resulting 400 names all the real ones. Generic
+     * by design (reflects the actual entity), so it never drifts out of
+     * sync the way a hand-maintained list of property names per endpoint
+     * eventually would.
      */
     @ExceptionHandler(PropertyReferenceException.class)
     public ResponseEntity<ErrorResponse> handlePropertyReference(PropertyReferenceException ex, HttpServletRequest req) {
-        String message = "Invalid sort property: " + ex.getPropertyName();
+        Class<?> entityType = ex.getType().getType();
+        List<String> validProperties = Arrays.stream(entityType.getDeclaredFields())
+                .filter(f -> !Modifier.isStatic(f.getModifiers()))
+                .map(java.lang.reflect.Field::getName)
+                .sorted()
+                .toList();
+        String message = "Invalid sort property: '" + ex.getPropertyName() + "'. Valid properties for sorting: " + validProperties;
         log.warn(message);
         return build(HttpStatus.BAD_REQUEST, message, req);
     }

@@ -134,13 +134,35 @@ class GlobalExceptionHandlerTest {
         // -- PropertyReferenceException, previously unhandled here and
         // falling through to the generic 500 catch-all for what is
         // ordinary bad client input.
-        PropertyReferenceException ex = org.mockito.Mockito.mock(PropertyReferenceException.class);
-        when(ex.getPropertyName()).thenReturn("[\"string\"]");
+        PropertyReferenceException ex = mockPropertyReferenceException("[\"string\"]", com.schwab.urlshortener.entity.UrlMapping.class);
 
         var response = handler.handlePropertyReference(ex, request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().message()).contains("[\"string\"]");
+    }
+
+    @Test
+    void handlePropertyReference_listsEveryActualSortablePropertyOnTheEntity() {
+        // This is the actual answer to "what are the valid sort values here":
+        // submit any invalid one and the 400 names all the real ones,
+        // reflected off the real entity so the list can't drift out of
+        // sync with a hand-maintained one as fields are added/removed.
+        PropertyReferenceException ex = mockPropertyReferenceException("bogus", com.schwab.urlshortener.entity.UrlMapping.class);
+
+        var response = handler.handlePropertyReference(ex, request);
+
+        String message = response.getBody().message();
+        assertThat(message).contains("shortCode", "originalUrl", "clickCount", "active", "createdAt", "expiresAt");
+    }
+
+    private static PropertyReferenceException mockPropertyReferenceException(String propertyName, Class<?> entityType) {
+        PropertyReferenceException ex = org.mockito.Mockito.mock(PropertyReferenceException.class);
+        when(ex.getPropertyName()).thenReturn(propertyName);
+        org.springframework.data.util.TypeInformation<?> typeInfo = org.mockito.Mockito.mock(org.springframework.data.util.TypeInformation.class);
+        org.mockito.Mockito.doReturn(entityType).when(typeInfo).getType();
+        org.mockito.Mockito.doReturn(typeInfo).when(ex).getType();
+        return ex;
     }
 
     @Test
