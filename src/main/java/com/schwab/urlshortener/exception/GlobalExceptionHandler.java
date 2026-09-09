@@ -3,6 +3,7 @@ package com.schwab.urlshortener.exception;
 import com.schwab.urlshortener.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -99,6 +100,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
         String message = "Invalid value for parameter '" + ex.getName() + "'";
+        log.warn(message);
+        return build(HttpStatus.BAD_REQUEST, message, req);
+    }
+
+    /**
+     * An invalid ?sort=... value on a Pageable-backed endpoint (e.g.
+     * Swagger UI's unedited array-type placeholder, sort=["string"],
+     * decoded and handed to Spring Data as a property named literally
+     * ["string"], which no entity has) -> 400. Without this handler it
+     * falls through to the generic Exception.class catch-all below as an
+     * opaque 500 -- this is ordinary bad client input, not a server fault.
+     */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handlePropertyReference(PropertyReferenceException ex, HttpServletRequest req) {
+        String message = "Invalid sort property: " + ex.getPropertyName();
         log.warn(message);
         return build(HttpStatus.BAD_REQUEST, message, req);
     }

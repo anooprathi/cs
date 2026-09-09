@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -122,6 +123,24 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().message()).contains("tenantId");
+    }
+
+    @Test
+    void handlePropertyReference_namesTheOffendingSortProperty_returnsBadRequestNotA500() {
+        // Regression test for a real bug found via Swagger UI: leaving the
+        // default array placeholder in a Pageable endpoint's ?sort= param
+        // (Swagger's own example is literally sort=["string"]) reaches
+        // Spring Data as a property named ["string"], which no entity has
+        // -- PropertyReferenceException, previously unhandled here and
+        // falling through to the generic 500 catch-all for what is
+        // ordinary bad client input.
+        PropertyReferenceException ex = org.mockito.Mockito.mock(PropertyReferenceException.class);
+        when(ex.getPropertyName()).thenReturn("[\"string\"]");
+
+        var response = handler.handlePropertyReference(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().message()).contains("[\"string\"]");
     }
 
     @Test

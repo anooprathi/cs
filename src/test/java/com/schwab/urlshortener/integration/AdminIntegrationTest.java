@@ -142,6 +142,19 @@ class AdminIntegrationTest {
     }
 
     @Test
+    void listTenants_withInvalidSortProperty_returns400NotA500() throws Exception {
+        // Regression test: Swagger UI's unedited default for the array-type
+        // ?sort= param on a Pageable endpoint is literally ["string"] --
+        // hitting Execute without changing it used to crash with an
+        // unhandled PropertyReferenceException (opaque 500) instead of a
+        // clean 400 naming the bad property.
+        mockMvc.perform(get("/api/v1/admin/tenants?page=0&size=10&sort=%5B%22string%22%5D")
+                        .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("string")));
+    }
+
+    @Test
     void getTenantDetail_returnsUsageSnapshot() throws Exception {
         mockMvc.perform(get("/api/v1/admin/tenants/{id}", tenantId)
                         .header(AdminAuthenticationFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
