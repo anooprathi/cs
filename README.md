@@ -4,7 +4,7 @@
 production concerns in mind (auth, rate limiting, billing, observability), and an adversarial self-review
 plus an independent production-readiness review both found and fixed genuine issues along the way — but it
 does not yet have everything actual production deployment requires (persistent database, migrations, CI/CD,
-a real administrative identity system, and more). See §10 "Known Limitations" and the "Production Readiness
+a real administrative identity system, and more). See §9 "Known Limitations" and the "Production Readiness
 Roadmap" at the end of this document for the full, honest accounting.
 
 A multi-tenant, production-*informed* URL shortener built with **Spring Boot 3 / Spring Cloud (OpenFeign) /
@@ -75,8 +75,8 @@ url-shortener/
 > Central and no local JDK compiler, so it could not be `mvn`-built during authoring — every file was
 > hand-reviewed for compilation correctness at the time, not compiler-verified. It has since been
 > **independently built and run outside that sandbox**, and multiple real issues found in that process were
-> fixed and are reflected in the current code (see `ENGINEERING_SUMMARY.md` §9-14 for the full account,
-> including several genuine bugs this caught that a hand review alone had missed). See §9 below for the
+> fixed and are reflected in the current code (see `ENGINEERING_SUMMARY.md` §8-11 for the full account,
+> including several genuine bugs this caught that a hand review alone had missed). See §8 below for the
 > specific verification record — Java/Maven versions, the exact command run, test results, and coverage.
 
 ### Build
@@ -401,7 +401,7 @@ curl -s -X POST http://localhost:8080/api/v1/admin/tenants/1/rotate-key \
   -H "X-Admin-Key: $ADMIN_KEY"
 
 # Branded/custom domain: application-level association only — this does NOT
-# provision DNS or a TLS certificate for the domain (see §12 "Custom domains"
+# provision DNS or a TLS certificate for the domain (see §11 "Custom domains"
 # for that explicit boundary). Once set, new links created by this tenant use
 # it in their returned shortUrl.
 curl -s -X PATCH http://localhost:8080/api/v1/admin/tenants/1/domain \
@@ -499,38 +499,7 @@ Every error response uses the same envelope:
 
 See `ARCHITECTURE.md` for the full control-flow diagram and design-decision rationale.
 
-## 7. Spring Boot 4 Migration Attempt (Reverted)
-
-This project **attempted** a migration to Spring Boot 4.1.1 and reverted back to 3.3.4. Kept here as a
-record of what was tried, what worked, and what didn't — this isn't hidden or quietly undone.
-
-**What was correctly identified and fixed along the way** (mechanical Boot 4 changes, verified against
-current documentation before applying): `spring-boot-starter-web` → `spring-boot-starter-webmvc` rename;
-`@MockBean`/`@SpyBean` removed in favor of `@MockitoBean`; `@WebMvcTest`/`@AutoConfigureMockMvc` moved to a
-dedicated `spring-boot-webmvc-test` module; Spring Cloud release train bumped to the one aligned with Boot
-4.0.x/4.1.x; springdoc-openapi bumped to its Jakarta-EE-11 line; a deliberate decision to stay on Jackson 2
-via Spring's own `spring-boot-jackson2` bridge rather than adopt Jackson 3 unverified.
-
-**What ended the attempt:** `@WebMvcTest` in Boot 4 does not supply an `HttpSecurity` bean to a custom
-`SecurityFilterChain @Bean` method inside an `@Import`-ed `@Configuration` class — `SecurityConfig`'s
-`securityFilterChain(HttpSecurity http)` method failed with `NoSuchBeanDefinitionException` for its own
-`HttpSecurity` parameter, even with `SecurityConfig` explicitly imported into the test slice. This is a real
-behavior change from Boot 3, whose `@WebMvcTest` documentation explicitly guaranteed Spring Security
-auto-configuration ("By default, tests annotated with `@WebMvcTest` will also auto-configure Spring
-Security"). Two prior guesses at the cause (a compile-time package move, then a hypothesized Jackson
-bean-resolution ambiguity) were each plausible, each fixed something real, and neither was the actual root
-cause — the real error only surfaced once the full stack trace was available, not the Maven summary section.
-At that point, further guessing without a compiler available in the authoring environment stopped being a
-reasonable way to spend the user's time, and reverting to the known-working 3.3.4 baseline was the right
-call — see `ENGINEERING_SUMMARY.md` for the fuller account.
-
-**What was kept from the attempt, because it's an improvement independent of Spring Boot version:**
-`SecurityConfig`, `ApiKeyAuthenticationFilter`, and `RateLimitFilter` no longer depend on Spring's
-auto-configured `ObjectMapper` bean — they use a small dedicated `ErrorResponseWriter` instead, since they
-only ever serialize one small, fixed DTO. This removes a class of bean-resolution fragility regardless of
-Boot version and was not reverted.
-
-## 8. Production Readiness
+## 7. Production Readiness
 
 Async execution, ACID hardening, observability, and multi-datacenter support — see `ARCHITECTURE.md` §7 for
 the full writeup (including an explicit, honest boundary between what's real application code here and what
@@ -547,7 +516,7 @@ genuinely requires infrastructure outside this repository for true multi-DC oper
   multi-instance/multi-DC operation, since local buckets let a tenant's effective limit multiply by instance
   count. The app was already stateless otherwise (no server-side sessions).
 
-## 9. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
+## 8. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
 
 A real `mvn clean verify` and a real Postman/Newman run were executed against this working tree — not
 inferred, not carried over from an earlier commit. Two separate verification passes are recorded here, each
@@ -597,11 +566,11 @@ Re-run after both fixes: clean, both times.
 fix: clean, 0 failures. This is exactly the class of gap this document has repeatedly said only running the
 system — not reading it — can catch, and it held true again here.
 
-## 10. Known Limitations / Trade-offs
+## 9. Known Limitations / Trade-offs
 
 See `ENGINEERING_SUMMARY.md` §5 for the full list. Highlights:
 - Rate-limit buckets default to single-node/in-process (`app.rate-limit.backend=local`) — switch to
-  `redis` for multi-instance/multi-DC deployments (see §8 above).
+  `redis` for multi-instance/multi-DC deployments (see §7 above).
 - No real payment processor integration — billing is metering + rating only, by design (see §4.7 above).
 - ~~No tenant plan-upgrade/downgrade flow, no admin console for cross-tenant visibility~~ — addressed: see
   §4.10 / §6 above (`/api/v1/admin/**`). Remaining gap: no admin UI, API only; no audit log of admin actions
@@ -611,14 +580,14 @@ See `ENGINEERING_SUMMARY.md` §5 for the full list. Highlights:
 - True multi-datacenter deployment requires real infrastructure (DB replication topology, cross-DC traffic
   routing, secrets distribution) this codebase cannot itself provide — see ARCHITECTURE.md §7.4 for exactly
   where that line sits.
-- Still on Spring Boot 3.3.4 — see §7 above for why a Boot 4 upgrade was attempted and reverted. It's also no
-  longer one of Spring's actively-maintained community versions (3.4/3.5 are current) — a real deployment
-  should upgrade Spring Boot and Spring Cloud together and add automated dependency-currency checks.
+- On Spring Boot 3.3.4, no longer one of Spring's actively-maintained community versions (3.4/3.5 are
+  current) — a real deployment should upgrade Spring Boot and Spring Cloud together and add automated
+  dependency-currency checks.
 - ~~`GlobalExceptionHandler`'s handlers for `RateLimitExceededException`/`MethodArgumentTypeMismatchException`,
   and `ExpiredUrlCleanupService` entirely, had no direct test coverage~~ — addressed: `GlobalExceptionHandlerTest`
-  and `ExpiredUrlCleanupServiceTest` now cover both directly (see `ENGINEERING_SUMMARY.md` §16).
+  and `ExpiredUrlCleanupServiceTest` now cover both directly (see `ENGINEERING_SUMMARY.md` §13).
 
-## 11. Production Readiness Roadmap
+## 10. Production Readiness Roadmap
 
 Everything below is a genuine, currently-open gap between this prototype and an actual production
 deployment — organized by what it would take to close each one, not glossed over. Items marked **(code)**
@@ -725,9 +694,9 @@ list) are substantial engineering efforts in their own right, comparable in scop
 that already took multiple iterative passes. They're listed here because a "production-informed prototype"
 should say precisely what separates it from a production-ready system, not leave that gap implicit.
 
-## 12. Product Direction Considered — "Secure Temporary Link Manager" (Not Implemented)
+## 11. Product Direction Considered — "Secure Temporary Link Manager" (Not Implemented)
 
-A distinct **product** direction (as opposed to §11's engineering/infrastructure gaps) was proposed and is
+A distinct **product** direction (as opposed to §10's engineering/infrastructure gaps) was proposed and is
 recorded here deliberately — thought about, deliberately not built, not overlooked. It reframes the in-memory
 H2 database from a limitation into an intentional feature: a disposable, self-contained link manager for
 development teams, internal campaigns, demos, and time-limited sharing, where links are meant to expire, a
@@ -769,7 +738,7 @@ everything; a caller filters client-side today).
 implemented: clicks-over-time series, unique-visitor tracking, referrer capture, device/browser detection,
 country/region (geo-IP), bot detection, CSV export, or a "most popular links" ranking. Any of these would also
 reopen the "stop logging complete destination URLs" and general PII-handling questions already flagged in
-§11's abuse-prevention section, since request-level analytics data (IP, user agent, referrer) is itself
+§10's abuse-prevention section, since request-level analytics data (IP, user agent, referrer) is itself
 sensitive.
 
 **5. Teams and security**
@@ -781,11 +750,11 @@ sensitive.
 - Read-only vs. editor roles — not implemented; a tenant is a single undifferentiated role, and admin is a
   single `ROLE_ADMIN` with no finer grants.
 - Audit log — not implemented as a queryable record; only ad hoc `INFO`-level application log lines exist per
-  mutation (already named as a gap in §10).
+  mutation (already named as a gap in §9).
 - Email or invite-based registration — not implemented; registration today is self-service, name-only, with
   no identity verification at all.
 - Prevent public users from assigning themselves PREMIUM — **✅** already fixed (see `ENGINEERING_SUMMARY.md`
-  §19) — registration unconditionally assigns `STANDARD`; a plan change is admin-only.
+  §16) — registration unconditionally assigns `STANDARD`; a plan change is admin-only.
 
 **6. Custom domains** (e.g. `go.company.com/pricing`) — **◐** partial, added this session: an admin can
 associate a branded domain with a tenant (`PATCH /api/v1/admin/tenants/{id}/domain`, `Tenant.customDomain`,
@@ -795,7 +764,7 @@ must already be CNAME'd to this deployment by whoever controls it) or issue/mana
 exact hostname — without both, `https://{customDomain}/{shortCode}` won't actually resolve to or be trusted
 for this app. That's real infrastructure (typically a reverse proxy with automatic ACME/Let's Encrypt
 handling, e.g. Caddy or Traefik, sitting in front of this app) in the same category as the Postgres/Redis/K8s
-gaps in §11 — this codebase records and validates the association, it does not and cannot make the domain
+gaps in §10 — this codebase records and validates the association, it does not and cannot make the domain
 actually work end-to-end on its own. Redirect resolution itself also remains path-only (`GET /{shortCode}`
 matches on path regardless of which `Host` header it arrived on) — the custom domain is purely cosmetic in
 the returned `shortUrl` today, not a routing/namespace change, so short codes are still globally unique across
@@ -803,14 +772,14 @@ all tenants rather than scoped per-domain.
 
 **7. Safety controls**
 - URL malware/phishing scanning — ◐ partial: `FeignUrlSafetyChecker` is real and wired but feature-flagged
-  **off** by default, since there's no real safety-check provider to call in this environment (see §8, §11).
-- Domain deny-list, a report-abuse endpoint — not implemented (deny-list already named as a gap in §11).
+  **off** by default, since there's no real safety-check provider to call in this environment (see §7, §10).
+- Domain deny-list, a report-abuse endpoint — not implemented (deny-list already named as a gap in §10).
 - Administrative suspension of a *specific link* (as opposed to an entire tenant) — not implemented; today
   admin action stops at the tenant level (`PATCH /api/v1/admin/tenants/{id}/status`), there's no per-link
   admin override.
-- Registration/IP rate limiting — not implemented (already named as a gap in §11 — today's `RateLimitFilter`
+- Registration/IP rate limiting — not implemented (already named as a gap in §10 — today's `RateLimitFilter`
   only ever sees already-authenticated requests).
-- Stop logging complete destination URLs verbatim — not implemented (already named as a gap in §11).
+- Stop logging complete destination URLs verbatim — not implemented (already named as a gap in §10).
 
 **Making in-memory storage safer** (leaning into H2-in-memory as a deliberate choice rather than trying to
 hide it):

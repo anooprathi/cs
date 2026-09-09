@@ -47,7 +47,7 @@ high-level. Normalized into a concrete engineering problem:
   duplicate-alias race, generation-exhaustion.
 - Quality gates applied: JaCoCo coverage gate (originally set to 80% line; lowered to 75% during the
   tenancy/security/rate-limiting/billing pass — see §6's Limitations for why — then restored to 80% once
-  targeted new tests closed the gaps that justified lowering it, see §16; the current live value is always
+  targeted new tests closed the gaps that justified lowering it, see §13; the current live value is always
   `pom.xml`'s, not this historical note); manual review of every
   generated file for Spring idioms and security implications before acceptance (see §5 for what a real
   `mvn verify` run would additionally need to confirm, given this sandbox's constraints — noted in
@@ -177,19 +177,19 @@ richer options as out-of-scope rather than guessing at unstated requirements or 
 > the production-readiness pass existed. Several of these were addressed in later passes and are marked
 > `[SUPERSEDED]` inline, with a pointer to where. This section is preserved rather than edited away because
 > it's part of the traceability record the assignment asks for — showing what was known/missing at each
-> point, not just the final state. If you're looking for the *current* limitations, see README.md §10 or
+> point, not just the final state. If you're looking for the *current* limitations, see README.md §9 or
 > ENGINEERING_SUMMARY.md §5.
 
 **Limitations (explicit, not hidden):**
 - **This project was not compiled or executed during authoring** — the sandbox used to produce it has no
   access to Maven Central and no local `javac`. Every file was manually reviewed for type correctness,
-  Spring wiring, and import completeness at the time, not compiler-verified. **[SUPERSEDED — see §15]**:
+  Spring wiring, and import completeness at the time, not compiler-verified. **[SUPERSEDED — see §12]**:
   `mvn clean verify` has since actually been run, by the candidate/author, outside this sandbox, and passed.
   This note is kept here as an accurate record of the state at the time this scenario was written, not
   retroactively edited away.
 - DB-level unique-constraint violations on `shortCode` (a true concurrent race past the `existsByShortCode`
   pre-check) are not yet specifically caught and mapped to `409` — they would currently surface via the
-  generic `Exception` handler as a `500`. **[SUPERSEDED — see §12 "ACID hardening"]**: this was fixed during
+  generic `Exception` handler as a `500`. **[SUPERSEDED — see §9 "ACID hardening"]**: this was fixed during
   the production-readiness pass; `UrlShortenerServiceImpl` now catches `DataIntegrityViolationException` on
   both the custom-alias and generated-code paths and maps it correctly.
 - No rate limiting on `POST /api/v1/urls` or on redirects. **[SUPERSEDED — see §6]**: added in the very next
@@ -245,7 +245,7 @@ scoped, implemented, and reviewed as its own unit of work rather than one undiff
   time-box. Documented rather than quietly loosened without explanation.
 - Same standing caveat as before, accurate as of that pass: **this project had not yet been compiled** in
   the authoring environment (no Maven Central / `javac` access). The surface area roughly doubled across
-  these two passes, which is exactly why running `mvn clean verify` locally mattered so much — see §15 for
+  these two passes, which is exactly why running `mvn clean verify` locally mattered so much — see §12 for
   the record of that having since actually happened.
 
 ---
@@ -272,126 +272,7 @@ a SOLID fix.
 
 ---
 
-## 8. Addendum — Spring Boot 4 Migration: Attempted, Reverted
-
-Requested explicitly: "make Spring boot 4.xx". Spring Boot 4 postdates this assistant's reliable training
-knowledge, so every version number and compatibility claim used during the attempt came from live web
-search against current documentation, not training recall. That research process worked reasonably well —
-it correctly anticipated several real breaking changes before hitting them. What it could not do was
-substitute for actually compiling and running the result, and that gap is what ultimately ended the attempt.
-
-**Sequence of what happened, in order, each a genuine fix for a genuine problem — and each still not
-enough:**
-
-1. **Migrated the dependency surface.** Parent → 4.1.1, `spring-boot-starter-web` → `spring-boot-starter-webmvc`,
-   Spring Cloud train → 2025.1.2, springdoc-openapi → 3.1.0, and a deliberate, documented decision to stay on
-   Jackson 2 (via Spring's own `spring-boot-jackson2` bridge) rather than adopt Jackson 3 — reasoned out from
-   research (package rename, immutable builder-constructed `ObjectMapper`, checked→unchecked exceptions,
-   plus a real open GitHub issue showing springdoc itself breaking against Jackson 3), not attempted
-   unverified.
-2. **First real build error**: `@WebMvcTest`/`@AutoConfigureMockMvc` had moved to a dedicated module
-   (`spring-boot-webmvc-test`) no longer pulled in by `spring-boot-starter-test`. Fixed correctly — new
-   import package, new test-scoped dependency (deliberately the bare artifact to protect the Jackson-2
-   decision).
-3. **Second real build error**: `UrlShortenerControllerWebMvcTest`'s context failed to load. The Maven output
-   available at the time was the summary section, not the full `Caused by:` chain. Reasoned from
-   circumstantial evidence (both `Jackson2AutoConfiguration` and Jackson 3's `JacksonAutoConfiguration`
-   visible together in the context customizer list, a `SecurityConfig` constructor needing `ObjectMapper`) to
-   a plausible hypothesis, and made a real, independently-justifiable improvement — removing the `ObjectMapper`
-   constructor dependency from `SecurityConfig`/`ApiKeyAuthenticationFilter`/`RateLimitFilter` in favor of a
-   small dedicated `ErrorResponseWriter` — while being explicit that this was a well-supported hypothesis, not
-   a confirmed diagnosis, and asking for the actual stack trace if it didn't resolve things.
-4. **The full stack trace arrived, and the actual root cause was neither of the above two guesses**:
-   `NoSuchBeanDefinitionException` for `HttpSecurity` itself — `@WebMvcTest` in Boot 4 does not supply an
-   `HttpSecurity` bean to a `SecurityFilterChain @Bean` method, even inside an explicitly `@Import`-ed
-   `@Configuration` class. This is a real behavior change from Boot 3, whose own `@WebMvcTest` documentation
-   explicitly guaranteed Spring Security auto-configuration by default. Nothing in the research done before
-   or during this migration surfaced this specific gap — it is the kind of framework-internals interaction
-   that's very hard to find by reading documentation and very fast to find by reading a stack trace.
-
-**Decision: revert to 3.3.4, not attempt a third guess.** Two genuine, reasoned fixes in a row that were each
-plausible and each wrong is a signal, not bad luck — it means the remaining gap between "what the
-documentation says" and "what actually happens at runtime" for this specific combination (custom
-`SecurityFilterChain` + `@WebMvcTest` + Boot 4.1.1) is bigger than research alone was closing, and further
-guessing without a compiler in the authoring environment stops being a responsible way to spend the user's
-verification cycles. The user asked directly to revert once told Boot 4 was "a problem," and that was the
-right call to honor rather than push for a fourth attempt.
-
-**What survived the revert, on its own merits:** the `ErrorResponseWriter` extraction from step 3 above.
-It's a strict simplification independent of Spring Boot version — `SecurityConfig` and the two servlet
-filters only ever serialize one small, fixed `ErrorResponse` DTO, and depending on Spring's auto-configured
-`ObjectMapper` bean for that was unnecessary coupling even under Boot 3, where it happened to work. Kept, not
-reverted.
-
-**What this confirms about how to run this kind of migration going forward:** documentation research is
-genuinely useful for anticipating *known, documented* breaking changes (and this pass anticipated several
-correctly) but cannot substitute for compiling — the failures that actually stopped this migration were
-runtime dependency-injection behavior, not anything a migration guide would enumerate. A major-version
-framework migration attempted without local compiler access should be expected to need either working
-compiler access or a willingness to stop and revert once the pattern of "plausible fix, still wrong" repeats,
-rather than continuing to iterate blind.
-
-## 9. Addendum — The Original @WebMvcTest 500s Were Never Actually Fixed
-
-After reverting to 3.3.4, `mvn clean verify` reproduced the exact same three `500` failures in
-`UrlShortenerControllerWebMvcTest` (`createShortUrl`, `deactivate`, `getStats`) that had supposedly been
-fixed twice before — once in the original SOLID-refactor pass, once again in a later pass, both times with
-the identical patch (`@Import(SecurityConfig.class)` plus mocking its constructor dependencies). Two
-"successful" fixes of the same bug that both turned out not to have worked is a stronger signal than either
-failure alone: it meant the diagnosis itself was wrong, not that the fix needed a third application.
-
-**Corrected diagnosis:** `@WebMvcTest` does need help resolving `@AuthenticationPrincipal` in a slice this
-narrow — that part of the original reasoning was right. What was wrong was the mechanism assumed: this
-project's fix imported an entire `SecurityFilterChain`-producing `@Configuration` class on the theory that
-its presence was what triggered Spring Security's MVC wiring. `@WebMvcTest`'s own documentation states
-plainly what it actually auto-includes: `HandlerMethodArgumentResolver` beans, and `WebMvcConfigurer` beans
-found nested in the test class as `@TestConfiguration`. The fix that actually works is the direct one:
-implement `WebMvcConfigurer.addArgumentResolvers` in a nested `@TestConfiguration` and register Spring
-Security's `AuthenticationPrincipalArgumentResolver` there — no `SecurityFilterChain`, no `SecurityConfig`
-import, no unrelated bean mocks. This is also a smaller, more targeted fix than either prior attempt, and
-notably was also the fix that would have avoided ever importing `SecurityConfig` into this slice in the
-first place — which is what caused the Spring Boot 4 `HttpSecurity`-bean regression in Addendum §8. Both
-problems trace back to the same over-broad original mechanism.
-
-**Lesson for this document to actually hold to going forward:** a test passing after a fix is not the same
-as the fix being verified against the actual failure — this specific "500 on three tests" symptom was
-"fixed" (i.e., a change was made, the change looked reasonable, and no compiler was available to check that
-it actually resolved the reported symptom before packaging and moving to the next request) twice without
-ever confirming against a real test run. When a fix can't be compiler-verified before delivery, saying so
-plainly is not enough on its own if the same category of guess then gets treated as settled and built on top
-of in later passes; this repeats until the guess is checked or is replaced by a claim about how the affected
-mechanism is documented to work, not just how it plausibly might.
-
-## 10. Addendum — The Actual Root Cause, Confirmed
-
-The full stack trace requested in §9 arrived: `java.lang.NullPointerException: Cannot invoke
-"TenantPrincipal.tenantId()" because "tenant" is null`, thrown from inside the controller method itself —
-meaning `AuthenticationPrincipalArgumentResolver` (registered correctly in §9's fix) *ran*, and resolved the
-parameter to `null` rather than failing to resolve it at all. That distinction mattered: it meant the
-resolver-registration fix was right, and the bug was one level removed — in how the test was populating the
-`Authentication` the resolver reads.
-
-The MockMvc failure dump included the request's session attributes, which showed the correct
-`SecurityContext` (with the right `TenantPrincipal`) present — but stored in the mock `HttpSession`, not in
-`SecurityContextHolder`. `SecurityMockMvcRequestPostProcessors.authentication(...)`, used at every one of
-this test's four authenticated call sites, writes the context via the session-backed
-`SecurityContextRepository`, on the assumption that a security filter (`SecurityContextHolderFilter`) will
-load it into `SecurityContextHolder` for the request thread. `addFilters = false` — set deliberately, for
-good reasons unrelated to this — disables that filter along with everything else in the chain, so the
-context was written but never actually applied to the thread the resolver reads from.
-
-**Fix:** a local `RequestPostProcessor` that sets `SecurityContextHolder` directly —
-`SecurityContextHolder.setContext(...)` — the exact static API `AuthenticationPrincipalArgumentResolver`
-calls into, with no filter or session indirection in between. Paired with clearing it in `@AfterEach` to
-avoid the ThreadLocal leaking across tests sharing a Surefire fork.
-
-**Why this one is trusted more than the prior three:** it isn't reasoning about what a slice's
-auto-configuration "should" wire up — it's reading the exact library source behavior implied by the actual
-observed evidence (the session-attrs dump) and using the one API documented, by Spring itself, to be what
-the resolver reads. The previous attempts were each a plausible mechanism *near* the real one; this one
-targets the exact place the failure was shown to be.
-
-## 11. Addendum — Admin API
+## 8. Addendum — Admin API
 
 Requested explicitly: cross-tenant visibility into "all the tenants, their tier and other stuff" an admin
 could do. This was already a named gap — §5's limitations list had "no admin console for cross-tenant
@@ -424,9 +305,9 @@ genuinely authenticates the caller (as `ROLE_TENANT`, via the existing `ApiKeyAu
 Spring Security's `AuthorizationFilter` correctly treats missing `ROLE_ADMIN` as `403` (authenticated,
 insufficient privilege), not `401` (no credential at all). Caught by re-deriving the actual filter-chain
 mechanics rather than assuming the first plausible status code, and fixed with a test comment explaining the
-401-vs-403 distinction for whoever reads that test next — the same kind of self-check this document has had
-to learn to do the hard way earlier in this project (see §9-10), applied proactively this time instead of
-needing a failing build to surface it.
+401-vs-403 distinction for whoever reads that test next — reasoning through the actual filter-chain mechanics
+proactively, rather than assuming the first plausible status code and needing a failing build to surface the
+mistake later.
 
 **Limitations, stated rather than hidden:**
 - Single shared admin credential, not per-admin-user accounts — adequate for "cross-tenant visibility for
@@ -438,7 +319,7 @@ needing a failing build to surface it.
 - The admin key rotation story is manual (generate a new secret, hash it, update the config, redeploy) —
   fine for a prototype's single static secret, a real system would want this to not require a redeploy.
 
-## 12. Addendum — Production Readiness
+## 9. Addendum — Production Readiness
 
 Requested explicitly: multi-datacenter support, async where applicable, ACID compliance under concurrent
 load, and observability, as a single "make it production ready" pass.
@@ -450,8 +331,7 @@ piece and calling the whole request "done," or (b) refusing the request because 
 the approach taken was: implement everything that genuinely is application code, and draw the line to
 infrastructure-level concerns explicitly and precisely (ARCHITECTURE.md §7.4), rather than leaving that
 boundary implied or hidden. This is the same posture applied throughout this project to other true scope
-limits (billing/invoicing never touching real payment processing; Jackson 3 adoption deferred during the
-Boot 4 attempt) — state the boundary, don't paper over it.
+limits (billing/invoicing never touching real payment processing) — state the boundary, don't paper over it.
 
 **What was implemented, and the reasoning behind each:**
 1. **Async metering** — a real `@Async` change, not a decorative one, with a bounded executor (Spring's
@@ -461,10 +341,9 @@ Boot 4 attempt) — state the boundary, don't paper over it.
    into the existing integration tests (they assert on usage counts immediately after the triggering
    request). Caught and fixed before it could surface as a confusing intermittent test failure later — a
    `app.async.metering.enabled` toggle keeps tests deterministic (synchronous) while production runs
-   genuinely async. This is the same category of self-check as the 401-vs-403 catch in the admin pass (§11)
+   genuinely async. This is the same category of self-check as the 401-vs-403 catch in the admin pass (§8)
    — proactively reasoning through a change's second-order effects rather than shipping the first version
-   that compiles (conceptually) and waiting for a failing build to reveal the problem, which has been this
-   project's most expensive recurring failure mode (see §9-10).
+   that compiles (conceptually) and waiting for a failing build to reveal the problem.
 3. **ACID hardening** — closed a gap that had been sitting in this document as an accepted, named limitation
    since the original build (§5: "a duplicate-key exception from the DB itself is not yet mapped to 409").
    Production-readiness was the right trigger to actually fix it rather than continue documenting around it.
@@ -472,8 +351,8 @@ Boot 4 attempt) — state the boundary, don't paper over it.
    `RedisRateLimiterBackend`) was scoped down from a more ambitious "replicate the smooth token-bucket
    algorithm over Redis via Lua" design to a simpler fixed-window counter, specifically because the more
    sophisticated version would need an atomic multi-command Redis script to be race-free under concurrency —
-   exactly the kind of code this assistant cannot compile-verify, and exactly the kind of risk this project
-   has learned (repeatedly, and expensively — see §9-10) not to ship with unearned confidence. The simpler
+   exactly the kind of code this assistant cannot compile-verify, and exactly the kind of risk not worth
+   shipping with unearned confidence. The simpler
    algorithm's real trade-off (bounded imprecision at window boundaries) is stated in
    `RedisRateLimiterBackend`'s own Javadoc rather than left implicit.
 
@@ -483,7 +362,7 @@ whether it can sit on the classpath without a live Redis reachable (when `app.ra
 its default of `local`) without blocking application startup is reasoned about from general knowledge of
 Spring Data Redis's lazy-connection behavior, not confirmed by running it.
 
-## 13. Addendum — Code Review Fixes
+## 10. Addendum — Code Review Fixes
 
 Requested explicitly, following a self-review that produced seven concrete findings (not hypothetical —
 each cited the specific class and line). All seven addressed:
@@ -521,7 +400,7 @@ coverage gaps identified in the same review remain open — they're genuine test
 and were correctly scoped as "flag, don't necessarily fix on this pass" when first raised. Worth returning
 to.
 
-## 14. Addendum — Four Edge Cases Found During the Reviewer's Own Verification
+## 11. Addendum — Four Edge Cases Found During the Reviewer's Own Verification
 
 Found by the reviewer's own end-to-end and Postman testing, after `mvn clean verify` had already passed —
 exactly the category of bug a compiler and a happy-path smoke test cannot catch, since none of these four
@@ -556,9 +435,9 @@ Each of these is precisely the class of bug this project's own documentation has
 kind that plausible-looking review can't catch — not a syntax mistake, not a wrong status code, but a
 *runtime interaction* between two pieces of correct-looking code (a cache and a config change; a regex and
 a calendar; two non-atomic Redis commands; a test ordering assumption). Finding them required actually
-running the system, which is exactly why §15 below matters as much as it does.
+running the system, which is exactly why §12 below matters as much as it does.
 
-## 15. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
+## 12. Verification Record — STATUS: CONFIRMED (two passes, each finding and fixing one real thing)
 
 **This table was previously incomplete on principle — placeholder rows rather than invented numbers — until
 a real verification pass was actually run against this working tree.** Two passes are recorded below, each
@@ -574,7 +453,7 @@ exactly one genuine issue that only executing the system — not reading the dif
 | Command run | `mvn verify` |
 | Test result | Tests run: 225, Failures: 0, Errors: 0, Skipped: 0 |
 | JaCoCo line coverage | 93.9% (932/993 lines) — clears the 0.80 gate; see `target/site/jacoco/index.html` for the per-class breakdown |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §17/RequiredProfileGuard); create → redirect → stats → deactivate/reactivate/update flow confirmed end-to-end |
+| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (a profile is now required — see §14/RequiredProfileGuard); create → redirect → stats → deactivate/reactivate/update flow confirmed end-to-end |
 | Postman collection | The 92-request collection (62 test-scripts, 93 assertions), run via `newman run postman/url-shortener.postman_collection.json` against a freshly started instance: **0 failures**, after fixes made during each pass (below) |
 
 **Pass 1 (2026-09-08) found**: the first Postman run failed one assertion —
@@ -582,7 +461,7 @@ exactly one genuine issue that only executing the system — not reading the dif
 `rootPath_matchesNoRoute_isRejectedCleanly_notAnUnhandled500` already correctly asserts `401` and explains why
 (an anonymous caller denied by `denyAll()` is routed to Spring Security's `AuthenticationEntryPoint`, not its
 `AccessDeniedHandler` — that distinction is reserved for a real-but-insufficient credential, e.g.
-`AdminIntegrationTest`'s wrong-key cases). §17's commit (`cf53698`) claimed in its own message that "the
+`AdminIntegrationTest`'s wrong-key cases). §14's commit (`cf53698`) claimed in its own message that "the
 existing regression test **and Postman assertion** for `GET /` were updated accordingly" — only the JUnit
 half of that was true; the Postman collection's assertion was never actually touched. Fixed: Postman test
 renamed and its expectation corrected to `401`, `SecurityConfig` given an inline comment next to
@@ -606,13 +485,13 @@ Re-run after each pass's fixes: clean, both times. Exactly the category of gap t
 said only running the system catches — confirmed twice now, on the only two Postman runs in this project's
 history to actually execute against a live instance rather than be read and trusted.
 
-## 16. Addendum — JaCoCo Restored to 80%, With Actual New Coverage Behind It
+## 13. Addendum — JaCoCo Restored to 80%, With Actual New Coverage Behind It
 
 Requested directly: raise the gate back to 0.80 (from the 0.75 it was lowered to during the tenancy/
 security/billing pass — see §6) and increase unit/integration testing to support it. Raising the number
 alone would have been meaningless — if measured coverage doesn't actually clear 0.80, `mvn clean verify`
 simply starts failing where it passed before. So this added real tests for the two clearest zero-coverage
-gaps identified in the earlier code-review pass (§13), not just adjusted a threshold:
+gaps identified in the earlier code-review pass (§10), not just adjusted a threshold:
 
 - **`ExpiredUrlCleanupServiceTest`** — this class had *zero* test coverage of any kind before now. It's a
   `@Scheduled` method firing every 10 minutes; no integration test's timeframe would ever naturally trigger
@@ -628,7 +507,7 @@ gaps identified in the earlier code-review pass (§13), not just adjusted a thre
   means it's verified rather than left as unverified dead code either way, which is the more defensible state
   for reachable-but-unexercised code to be in.
 - **`AsyncConfigTest`** — the sync-vs-real-executor branch (`app.async.metering.enabled`) that makes
-  `UsageMeteringService`'s test-determinism story actually work (§12) had never been asserted directly,
+  `UsageMeteringService`'s test-determinism story actually work (§9) had never been asserted directly,
   only relied upon implicitly by every test that happened to run under the `test` profile.
 
 **What this does and doesn't establish.** These tests close the most clearly-identified, highest-value gaps
@@ -637,10 +516,10 @@ isolated units remain covered only indirectly, through the app successfully boot
 — inherent to what those classes are (bean-wiring, mostly), not the same category of gap a unit test closes
 the same way. Whether the bundle-wide line ratio JaCoCo actually reports now clears 0.80 was **not something
 this pass could verify at the time it was written** — the same standing limitation as everywhere else in this
-document: no compiler in the authoring environment. It has since been confirmed for real (§15): **94.9%**
+document: no compiler in the authoring environment. It has since been confirmed for real (§12): **94.9%**
 (878/925 lines), comfortably clear of the gate.
 
-## 17. Addendum — Independent Production-Readiness Review: Unsafe Defaults (Fixed)
+## 14. Addendum — Independent Production-Readiness Review: Unsafe Defaults (Fixed)
 
 An independent production-readiness review of the running application (not a code-reading exercise — actual
 runtime testing against a live instance) found four genuine issues, all stemming from the same root cause:
@@ -671,10 +550,10 @@ things that were unsafe *by default*, requiring no misconfiguration to trigger, 
 
 **Behavioral consequence, caught and handled rather than left as a surprise**: with the catchall now
 `denyAll()`, an unmatched route returns `401` for an anonymous caller (Security's `AuthorizationFilter`
-rejects it before the request ever reaches `DispatcherServlet` — see §15's Postman-verification note for the
+rejects it before the request ever reaches `DispatcherServlet` — see §12's Postman-verification note for the
 401-vs-403 nuance this specific point produced, found and fixed in a *later* pass, not this one) instead of
 the `404` a `NoResourceFoundException` would have produced. The existing regression test and Postman
-assertion for `GET /` needed updating to match; §15 documents that the Postman half of that update did not
+assertion for `GET /` needed updating to match; §12 documents that the Postman half of that update did not
 actually happen at the time despite this commit's message claiming otherwise, and was only completed later.
 New regression tests were added for the actuator lockdown itself (401 without the admin key, 200 with it —
 see `AdminIntegrationTest`).
@@ -683,7 +562,7 @@ Swagger was also disabled entirely in the `prod` profile (`springdoc.*.enabled=f
 gate its `SecurityConfig` rule by profile — simpler and harder to get subtly wrong than a profile-conditional
 security rule.
 
-## 18. AI-Assisted Execution — Concise Evidence Record
+## 15. AI-Assisted Execution — Concise Evidence Record
 
 Per the assignment's requirement to "define tasks with intent, constraints, acceptance criteria, and
 technical context; use disciplined prompting with iterative refinement; maintain traceability... apply
@@ -704,7 +583,7 @@ project's actual history, not reconstructed after the fact:
   enumerable/an information leak before being written, replaced with random generation — see §4's
   Traceability Summary for this and three other rejected drafts with rationale.
 - **Validation**: hand-review for compilation correctness (no compiler available in the authoring
-  environment — stated explicitly, not hidden); later confirmed by an actual `mvn clean verify` run (see §15).
+  environment — stated explicitly, not hidden); later confirmed by an actual `mvn clean verify` run (see §12).
 - **Human sign-off**: accepted after review; the id-encoding rejection above was the reviewer's own
   intervention *before* acceptance, not a post-hoc fix.
 
@@ -719,9 +598,9 @@ project's actual history, not reconstructed after the fact:
 - **Generated → edited → REJECTED, twice, before the real fix**: two successive fix attempts (importing
   `SecurityConfig` into the test slice; a nested `@TestConfiguration` argument-resolver registration) were
   each individually plausible and each **rejected by re-diagnosis** once the pattern of failure repeated
-  after supposedly being fixed — see §9-10 for the full, undisguised account. The actual fix (setting
-  `SecurityContextHolder` directly via a `RequestPostProcessor`) only came after insisting on the real stack
-  trace instead of continuing to guess from a status code.
+  after supposedly being fixed. The actual fix (setting `SecurityContextHolder` directly via a
+  `RequestPostProcessor`) only came after insisting on the real stack trace instead of continuing to guess
+  from a status code.
 - **Validation**: the real Surefire output, both before and after — not just re-reading the diff.
 - **Human sign-off**: the reviewer explicitly declined to accept the first two fixes ("that confirms X" was
   never said for those two — only after the third attempt, with evidence).
@@ -746,10 +625,10 @@ project's actual history, not reconstructed after the fact:
   written into the code itself, not just this summary.
 - **Validation**: manual review only, explicitly flagged as the least-verified part of that pass at the time.
 - **Human sign-off**: accepted, with an independent production-readiness review commissioned afterward
-  (§17, §19) that found several further genuine issues this process had missed — unsafe defaults (dev profile
+  (§14, §16) that found several further genuine issues this process had missed — unsafe defaults (dev profile
   activating silently, actuator endpoints reachable unauthenticated, a false-negative health check, noisy
-  trace-export failures — §17) and an authorization gap in tenant registration that surfaced two more
-  self-found defects while it was being fixed (§19). Sign-off was not treated as the end of validation, and
+  trace-export failures — §14) and an authorization gap in tenant registration that surfaced two more
+  self-found defects while it was being fixed (§16). Sign-off was not treated as the end of validation, and
   further external review was actively sought.
 
 ### Secure AI usage
@@ -765,7 +644,7 @@ project's actual history, not reconstructed after the fact:
   the engineer before being treated as accepted — including, concretely, the two rejected `@WebMvcTest` fix
   attempts above, the rejected sequential short-code scheme, and the rejected complex Redis token-bucket
   design. High-impact changes (anything touching auth, billing, or the rate limiter) specifically prompted
-  additional scrutiny and, in the admin-role-boundary case (§11), a self-caught correctness bug before
+  additional scrutiny and, in the admin-role-boundary case (§8), a self-caught correctness bug before
   shipping.
 
 This section is intentionally concise, not exhaustive — the full traceability record for every task lives in
@@ -773,9 +652,9 @@ This section is intentionally concise, not exhaustive — the full traceability 
 the same generated/edited/rejected/validated/signed-off shape at whatever depth that specific change actually
 warranted.
 
-## 19. Addendum — Registration Abuse, Tenant Name Enforcement, and a Second Invoice Race (Fixed)
+## 16. Addendum — Registration Abuse, Tenant Name Enforcement, and a Second Invoice Race (Fixed)
 
-Four fixes in one pass; only the first was on the independent review's original list (§17) — the other
+Four fixes in one pass; only the first was on the independent review's original list (§14) — the other
 three were found while fixing it, which is itself the point worth recording: fixing one flagged issue
 surfaced a pattern (the same unhandled concurrency race, twice) and a second, unrelated gap (an unenforced
 uniqueness constraint) that a narrower fix would have missed entirely.
@@ -785,7 +664,7 @@ uniqueness constraint) that a narrower fix would have missed entirely.
    the higher rate limits for free. Fixed by removing the field from the request DTO entirely, not just
    ignoring it silently: `TenantService.register` now assigns `STANDARD` unconditionally, and there is no way
    to submit anything else. A plan change is now exclusively an authenticated admin action
-   (`AdminService.updatePlan`, §11). `DevDataSeeder` was updated to register-then-upgrade via that same real
+   (`AdminService.updatePlan`, §8). `DevDataSeeder` was updated to register-then-upgrade via that same real
    admin path, so even the demo data seeder dogfoods the correct flow rather than constructing a `PREMIUM`
    tenant directly.
 2. **Found while verifying the fix above, not on the original review's list: tenant name uniqueness was
