@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Custom only to fork the console appender by profile — everything else
+  (logging.level.* overrides, defaults) still comes from Boot's own
+  LoggingSystem, same as before this file existed.
+
+  prod: JSON (via logstash-logback-encoder) so a log aggregation platform
+  (ELK/Loki/Datadog/Splunk) can parse fields instead of regexing plain
+  text. traceId/spanId are pulled from MDC — populated automatically by
+  micrometer-tracing-bridge-brave whenever a span is active — so a log
+  line can be correlated with its Zipkin trace by ID.
+
+  dev/test/default: Boot's stock human-readable console pattern,
+  unchanged (see console-appender.xml import below).
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProfile name="prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>spanId</includeMdcKeyName>
+                <customFields>{"service":"url-shortener"}</customFields>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <springProfile name="!prod">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

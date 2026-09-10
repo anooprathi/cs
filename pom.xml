@@ -145,6 +145,20 @@
             <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
 
+        <!-- Structured (JSON) console logging for the prod profile — see
+             logback-spring.xml. Lets a log aggregation platform (ELK/Loki/
+             Datadog/Splunk) parse fields directly instead of regexing plain
+             text; the traceId/spanId that micrometer-tracing-bridge-brave
+             already puts in MDC ride along as JSON fields automatically, so
+             a log line and a Zipkin trace can be correlated by ID. Dev/test
+             keep the plain human-readable console pattern (see
+             logback-spring.xml's springProfile blocks). -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+
         <!-- Spring Data Redis: backs the distributed rate-limiter (see
              RedisRateLimiterBackend / ARCHITECTURE.md §7.4). Only actually
              connects if app.rate-limit.backend=redis is set — the default
