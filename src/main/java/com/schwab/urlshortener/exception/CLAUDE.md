@@ -7,10 +7,13 @@ Guidance for Claude Code when working in `src/main/java/com/schwab/urlshortener/
 (`GlobalExceptionHandler.handleApiException`), so no new handler method is needed. Current subclasses and
 their status:
 - `DuplicateAliasException`, `DuplicateInvoiceException`, `DuplicateTenantNameException`,
-  `DuplicateCustomDomainException` → `409 CONFLICT`
+  `DuplicateCustomDomainException`, `InvalidSdlcRunStateException` → `409 CONFLICT`
 - `InvalidBillingPeriodException`, `InvalidUrlException` → `400 BAD_REQUEST`
-- `InvoiceNotFoundException`, `TenantNotFoundException`, `UrlNotFoundException` → `404 NOT_FOUND`
+- `InvoiceNotFoundException`, `TenantNotFoundException`, `UrlNotFoundException`, `SdlcRunNotFoundException`
+  → `404 NOT_FOUND`
 - `UrlExpiredException` → `410 GONE`
+- `LlmUnavailableException` → `503 SERVICE_UNAVAILABLE` (agentic LLM mode requested while disabled; see
+  `agentic/CLAUDE.md` for why this must never become a silent fallback)
 
 Only extend `RuntimeException` directly (bypassing `ApiException`) if the exception needs behavior beyond
 "status + message" — the two existing cases are `ShortCodeGenerationException` (its client-facing message

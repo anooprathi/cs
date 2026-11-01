@@ -12,6 +12,7 @@ Spring Data JPA / H2 / Spring Security**, with per-tenant fair-share rate limiti
 developed using AI-assisted engineering practices as described in `ENGINEERING_SUMMARY.md`.
 
 See also:
+- `IMPLEMENTATION_PLAN.md` — plan for the agentic SDLC orchestration layer (§12)
 - `ARCHITECTURE.md` — components, control flow, key design decisions
 - `ENGINEERING_SUMMARY.md` — the three required scenarios (greenfield / brownfield / ambiguous), AI-assisted execution log, risks & validation
 
@@ -56,6 +57,7 @@ url-shortener/
     │   ├── security/              Spring Security config + API-key auth filter
     │   ├── ratelimit/             per-tenant token-bucket rate limiting
     │   ├── billing/                usage metering + billing statement rating
+    │   ├── agentic/                agentic SDLC orchestrator: requirement → reviewable artifacts (§12)
     │   └── config/                 OpenAPI config, dev-only demo data seeder
     ├── main/resources/
     │   ├── application.properties       common defaults
@@ -453,6 +455,7 @@ curl -s -i http://localhost:8080/api/v1/admin/tenants
 | PATCH  | `/api/v1/admin/tenants/{id}/domain`   | Admin key   | Set/clear a tenant's branded short-link domain — application-level association only, no DNS/TLS provisioning |
 | GET    | `/api/v1/admin/tenants/{id}/urls`     | Admin key   | Every link that tenant has created, active or not |
 | GET    | `/api/v1/admin/usage`                 | Admin key   | Platform-wide usage for the current period, broken down by tenant |
+| GET/POST | `/api/v1/agentic/**`                | Admin key   | Agentic SDLC orchestrator: requirement → reviewable artifacts + human review (see §12) |
 
 Full interactive reference: `http://localhost:8080/swagger-ui.html` (click "Authorize" and paste your API key).
 
@@ -794,3 +797,121 @@ hide it):
   prose (this README, and a comment directly above `spring.datasource.url` in `application.properties`), but
   there is no warning surfaced at runtime (a startup log banner, a response header, or a dashboard notice) —
   only written documentation a reader has to already know to look for.
+
+## 12. Agentic SDLC Orchestration Layer
+
+An operator-facing capability that turns a free-text **engineering requirement** into **reviewable
+artifacts**, checks them with a deterministic quality gate, and records a human review decision. Design:
+`ARCHITECTURE.md` §8. Plan: `IMPLEMENTATION_PLAN.md`. Execution log: `ENGINEERING_SUMMARY.md` §17. A
+sample report from a real run: [`docs/agentic-sample-report.md`](docs/agentic-sample-report.md).
+
+| Stage | Artifact | What it contains |
+|---|---|---|
+| 1. `REQUIREMENTS` | `RequirementSpec` | FR-n / NFR-n statements, given/when/then acceptance criteria (AC-n), ambiguities (AMB-n) **each with the assumption taken**, out-of-scope items |
+| 2. `IMPACT` | `ImpactAnalysis` | Which **real components of this codebase** change and why (names from `agentic/component-catalog.json`), proposed new components, notable unaffected areas |
+| 3. `PLAN` | `ImplementationPlan` | Tasks (T-n) with `dependsOn`, components, and the AC-n each one serves |
+| 4. `TESTS` | `TestPlan` | Test cases (TC-n) per acceptance criterion, with level and target test class (existing test files from the catalog) |
+| 5. `RISKS` | `RiskAssessment` | Risks (R-n) with severity, mitigation, and affected components |
+| 6. `REVIEW` | `QualityGateReport` | **Deterministic** checks: components exist, ids unique, task graph acyclic with no dangling ids, every AC covered by a task **and** a test, HIGH risks mitigated. Any blocker fails the gate and blocks approval |
+
+### 12.1 Two execution modes, never confused
+
+| | `DETERMINISTIC_DEMO` (default) | `LLM` |
+|---|---|---|
+| What runs stages 1-5 | Rule-based templates: sentence splitting, keyword classification, a vague-term lexicon, keyword matching against the component catalog, layer-ordered task generation, a fixed risk table | One Claude call per stage via the official Anthropic Java SDK (`anthropic-java` 2.34.0), constrained by **structured outputs** to the artifact's schema |
+| Network / cost | None | One API call per stage; requirement text is sent to Anthropic |
+| Determinism | Same input → identical artifacts (tested) | Not deterministic |
+| Is it AI analysis? | **No.** It demonstrates the pipeline, traceability, and guardrails. Its "understanding" is keyword rules | Yes, and the output still requires human review |
+| Availability | Always | Only with `app.agentic.llm.enabled=true` and an `ANTHROPIC_API_KEY`. Otherwise `mode: LLM` is refused with **503**, never quietly served by demo mode |
+| Stage 6 quality gate | Deterministic | **Still deterministic.** The model never grades its own output |
+
+Every run, every artifact, every API response (`executionMode`, `executionNotice`, per-stage `source`), and
+the top of every rendered document states which mode produced it.
+
+### 12.2 Walkthrough (demo mode, dev profile)
+
+```bash
+export ADMIN_KEY=admin-dev-only-key-change-me   # operator identity; a tenant X-API-Key gets 403
+
+# What can this deployment actually do right now?
+curl -s http://localhost:8080/api/v1/agentic/capabilities -H "X-Admin-Key: $ADMIN_KEY"
+# {"defaultMode":"DETERMINISTIC_DEMO","availableModes":["DETERMINISTIC_DEMO"],"llmEnabled":false, ...}
+
+# Submit a requirement
+curl -s -X POST http://localhost:8080/api/v1/agentic/runs \
+  -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"title":"Max-click limit for short links",
+       "requirement":"Tenants must be able to set an optional maximum click limit when creating a short link.\nOnce the limit is reached, the redirect should stop working and return 410 Gone, like an expired link.\nThe redirect path must stay fast."}' \
+  | tee /tmp/run.json
+# 201: {"id":1,"executionMode":"DETERMINISTIC_DEMO","executionNotice":"DETERMINISTIC_DEMO: no language model
+#       was called. ...","status":"AWAITING_REVIEW","qualityGatePassed":true,"stages":[...6 stages...]}
+export RUN_ID=$(jq -r .id /tmp/run.json)
+
+# One artifact: typed JSON ("content") plus rendered Markdown
+curl -s http://localhost:8080/api/v1/agentic/runs/$RUN_ID/artifacts/IMPACT -H "X-Admin-Key: $ADMIN_KEY"
+
+# Everything as one reviewable Markdown document (paste into a ticket or PR)
+curl -s http://localhost:8080/api/v1/agentic/runs/$RUN_ID/report.md -H "X-Admin-Key: $ADMIN_KEY" > report.md
+
+# Human decision. APPROVED is refused (409) while the gate has blockers;
+# CHANGES_REQUESTED needs a comment; a run can be reviewed exactly once.
+curl -s -X POST http://localhost:8080/api/v1/agentic/runs/$RUN_ID/review \
+  -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"decision":"CHANGES_REQUESTED","reviewer":"eng-lead","comment":"Confirm the latency target (AMB-1) first."}'
+
+# Asking for LLM mode while it's disabled is an explicit 503, not a silent fallback
+curl -s -i -X POST http://localhost:8080/api/v1/agentic/runs -H "X-Admin-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" -d '{"title":"t","requirement":"r","mode":"LLM"}'
+# HTTP/1.1 503 ... "LLM execution mode is not enabled on this deployment ..."
+```
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/agentic/capabilities` | Modes available **right now** (reflects actual bean wiring), model, catalog size, stages |
+| POST | `/api/v1/agentic/runs` | `{title, requirement (≤10,000 chars), mode?}` → `201`. Runs synchronously |
+| GET | `/api/v1/agentic/runs` | Paged, newest first |
+| GET | `/api/v1/agentic/runs/{id}` | Run plus per-stage status, source, model, duration, tokens, error |
+| GET | `/api/v1/agentic/runs/{id}/artifacts/{stage}` | `REQUIREMENTS`, `IMPACT`, `PLAN`, `TESTS`, `RISKS`, `REVIEW` |
+| GET | `/api/v1/agentic/runs/{id}/report.md` | `text/markdown`, execution-mode banner first |
+| POST | `/api/v1/agentic/runs/{id}/review` | `{decision: APPROVED\|CHANGES_REQUESTED, reviewer, comment}` |
+
+All of these require `X-Admin-Key` (`401` without it, `403` with a tenant key).
+
+### 12.3 Enabling real LLM mode
+
+```bash
+export ANTHROPIC_API_KEY=...          # read by the SDK only; never a Spring property, never logged
+mvn spring-boot:run -Dspring-boot.run.profiles=dev \
+  -Dspring-boot.run.arguments="--app.agentic.llm.enabled=true"
+# optional: --app.agentic.llm.model=claude-opus-5 --app.agentic.llm.max-tokens=16000
+```
+Then submit runs with `"mode":"LLM"` (or set `app.agentic.default-mode=LLM`, which refuses to start unless
+LLM mode is enabled). Turning this on means each LLM-mode run's requirement text, the component catalog, and
+upstream artifacts are sent to the Anthropic API.
+
+### 12.4 Validation status, stated exactly
+
+| Capability | Validated how | Status |
+|---|---|---|
+| Demo-mode pipeline, all 6 stages, persistence, API, report, review state machine | Unit + MockMvc integration tests, plus a manual run against a live dev instance (the sample report was produced that way) | **Working, tested** |
+| Deterministic quality gate (every rule) | `QualityGateReviewerTest`: each rule triggered by a crafted violation | **Working, tested** |
+| Catalog matches the real repository | `ComponentCatalogTest`: every path and test file must exist | **Working, tested** |
+| Orchestrator's LLM-mode handling (provenance, tokens, failure → FAILED/SKIPPED, 503 when disabled, hallucinated component → gate blocks approval) | `SdlcOrchestratorTest` and `AgenticLlmModeIntegrationTest`, using a **scripted stand-in** `LlmClient`, not Claude | **Working, tested against a stub** |
+| Anthropic SDK boundary (request shape, structured-output schema, refusal, max_tokens, API/transport errors, usage) | `AnthropicLlmClientTest`, with the SDK client **mocked**. `AgenticLlmConfigTest` covers the feature flag wiring | **Tested at the boundary; no live call** |
+| A real Claude call returning schema-valid artifacts | `AnthropicLiveSmokeTest`, **opt-in** (`AGENTIC_LIVE_SMOKE=true` + `ANTHROPIC_API_KEY`). It spends API credit, so it never runs in a normal build | **Implemented, NOT executed in this repository's verification.** No live-model claim is made |
+| Quality of LLM-generated artifacts | Nothing automated. That would need an evaluation set | **Not evaluated** |
+
+### 12.5 Limitations
+
+- **Demo mode is not intelligent.** Keyword matching misses synonyms, over-matches generic words (the catalog
+  keywords are tuned to reduce this, see `ENGINEERING_SUMMARY.md` §17), and its acceptance criteria are
+  templated restatements, not real given/when/then analysis. It exists so the pipeline is demonstrable and
+  testable with no API key. It does not stand in for an LLM's judgment.
+- **Synchronous runs.** In LLM mode, five sequential model calls hold one HTTP request open. Async execution
+  with polling is the natural next step.
+- **Reviewer identity is self-declared.** `reviewer` is a free-text name, because the admin credential is a
+  single shared key (the same gap README §10 already names for all admin actions).
+- **Artifacts are proposals only.** Nothing is applied to the codebase, and no PR or ticket is created.
+- **No per-operator cost budget** for LLM mode beyond the input length cap and `max-tokens`.
+- **The catalog is curated.** New components need a catalog entry before impact analysis can name them. The
+  drift test only catches entries that point at missing files, not missing entries.

@@ -691,3 +691,102 @@ uniqueness constraint) that a narrower fix would have missed entirely.
 Regression tests were added for all four fixes, including the two race conditions specifically — mocking
 `DataIntegrityViolationException` on save to exercise the lost-race branch, not just the straightforward
 happy path (`TenantServiceTest`, `InvoiceServiceTest`).
+
+## 17. Addendum: Agentic SDLC Orchestration Layer
+
+### Requirement understanding
+The brief: "add a working agentic SDLC orchestration layer that transforms engineering requirements into
+reviewable artifacts", while preserving the existing service and tests, following the existing stack, and
+never claiming a capability works unless it's implemented and validated, with real LLM execution kept
+clearly distinct from deterministic demo behavior. Normalized into:
+- **Orchestration**: a pipeline of single-purpose agents with declared dependencies, run in a validated order.
+- **Artifacts**: typed (JSON for tools) and rendered (Markdown for people), persisted per stage with
+  provenance, and traceable to one another by id (AC-n in tasks and tests).
+- **Reviewable**: a deterministic quality gate before a human looks, then an explicit, recorded,
+  enforceable human decision. Nothing is applied to code automatically.
+- **Honest about mode**: two execution modes, stamped everywhere, and no silent fallback between them.
+
+The plan, written before any code, is `IMPLEMENTATION_PLAN.md`: tasks T1-T12 with dependencies,
+acceptance criteria, assumptions, and risks. Design is in `ARCHITECTURE.md` §8 and usage in `README.md` §12.
+
+### Codebase reasoning (impacted areas)
+- **Impacted (additive only):** `pom.xml` (one dependency), `SecurityConfig` (one matcher line, before the
+  `/api/v1/**` rule), `application.properties` (`app.agentic.*`, LLM off), three new `ApiException`
+  subclasses. Everything else is new code in `com.schwab.urlshortener.agentic`.
+- **Reused, not reinvented:** the operator identity (`X-Admin-Key`, fail-closed), `GlobalExceptionHandler`
+  and the `ApiException` family, `PageResponse`, `@ConfigurationProperties` records, the Lombok entity
+  idiom, and the feature-flag-off posture of `FeignUrlSafetyChecker` for anything that calls out. The one
+  contended write, the review decision, gets optimistic locking (`@Version`), resolving a race to a clean
+  409 rather than a 500, the same posture the repo already takes for its other races.
+- **Not impacted:** every URL-shortener, tenant, billing, rate-limiting, and admin code path. The 236
+  pre-existing tests were run after the dependency was added (T1) and again at the end, unchanged and green.
+
+### AI-assisted execution: generated / edited / rejected
+- **Generated, then edited after running it:** the deterministic agents' rules. The first live run against a
+  dev instance (requirement: "max-click limit", from README §11's backlog) produced a report that *passed the
+  gate* but read wrong in three ways that no unit test had asserted yet:
+  1. Every acceptance criterion said "given an operator authenticated with X-Admin-Key", because the actor
+     was chosen once per requirement and one line mentioned admins. **Edited:** the actor is chosen per
+     statement.
+  2. `Tenant` and `TenantService` were "impacted" purely because the word *tenant* appeared as the actor.
+     That crowded `RedirectController`, the component the requirement is actually about, out of the top-8
+     impact list. **Edited:** those catalog keywords were narrowed to "tenant entity" / "tenant registration".
+  3. INTEGRATION-level test cases targeted `UrlMappingMapperTest`, because the first related component won.
+     **Edited:** the target is chosen from the outermost-layer related component.
+  Each fix is now pinned by a test (`requirements_actorIsChosenPerStatement...`,
+  `impact_actorWordAlone_doesNotPullInTenantComponents`, `tests_integrationCasesTargetOuterLayer...`).
+- **Found by the new tests on their first run:** `UsageMeteringService`'s catalog keyword `count` matched
+  "click count", which made demo runs report a billing risk and drop "Billing" from the unaffected areas.
+  **Edited** to `usage count`. The catalog drift test also failed on its first run, correctly: it caught a
+  catalog entry pointing at `SdlcOrchestratorTest.java` before that file existed.
+- **Found by actually starting the app:** `ComponentCatalog` had two constructors (one for Spring, one for
+  tests), so Spring couldn't instantiate it and the app failed to boot. Unit tests passed, because they
+  never used Spring to build it. **Edited:** `@Autowired` on the Spring constructor. This is the same lesson
+  §12 records: only running the system catches this class of bug.
+- **Rejected: silent fallback from LLM to demo mode** when LLM isn't configured. It would make the
+  "never confuse the two" guarantee false in exactly the case it matters. The request gets 503 instead.
+- **Rejected: an LLM-based reviewer for stage 6.** The gate's checks (does this class exist, is the graph
+  acyclic, is every AC tested) are deterministic facts. Having the model grade its own output would add cost
+  and nondeterminism to the one stage whose value is being neither.
+- **Rejected: server-side refusal fallbacks on the Anthropic call.** That feature lives on the beta endpoint,
+  and its combination with class-based structured outputs isn't documented for the Java SDK. Under this
+  repo's rule against shipping unverified integration paths, a refusal fails the stage with its category.
+- **Rejected: hand-rolled JSON extraction from model prose.** Structured outputs (`outputConfig(Class)`) make
+  the artifact record the schema, so LLM and demo modes yield identical Java types.
+- **Verified against the SDK instead of guessed:** the `StructuredMessage`/`StopReason`/client-builder names
+  were read from the `anthropic-java` 2.34.0 sources jar before writing `AnthropicLlmClient`. The SDK's
+  runtime Jackson check (minimum 2.13.4, 2.18.1 blocked) was read from source to confirm Spring Boot 3.3.4's
+  Jackson 2.17.2 is compatible, and `javap` confirmed `AnthropicClient` has `close()` but isn't
+  `AutoCloseable`. That last one surfaced as a compile error, and a `try`/`finally` fixed it.
+
+### Validation & risk control
+| What | Evidence |
+|---|---|
+| Existing behavior preserved | Baseline `mvn clean verify` before any change: 236 tests, 0 failures. Same 236 still pass in the final run |
+| Demo pipeline, persistence, API, report, review state machine | `DeterministicAgentsTest`, `SdlcOrchestratorTest`, `SdlcRunServiceTest`, `AgenticIntegrationTest`; manual curl run against a live dev instance (401 / 403 / 503 / 201 / 200 / 409 all observed). `docs/agentic-sample-report.md` is that run's verbatim output |
+| Gate rules | `QualityGateReviewerTest`: every rule triggered by a crafted violation, including a hallucinated component, a dependency cycle, a dangling id, an uncovered AC, and an unmitigated HIGH risk |
+| LLM-mode orchestration | Scripted stand-in `LlmClient` (`SdlcOrchestratorTest`, `AgenticLlmModeIntegrationTest`): provenance and tokens surface in the API and report, failures propagate as FAILED/SKIPPED, and a hallucinated component fails the gate and blocks approval over HTTP |
+| Anthropic SDK boundary | `AnthropicLlmClientTest` with the SDK client mocked: request shape and generated schema, refusal, max_tokens, missing text block, parse failure, API status error, and transport error. `AgenticLlmConfigTest`: no client beans unless the flag is on |
+| **Real model call** | `AnthropicLiveSmokeTest` exists and is opt-in. **It was not run** for this verification (it spends the owner's API credit), so no claim is made that live LLM mode has been observed working end to end |
+
+The final verification numbers are in the "Verification" table at the end of this section.
+
+### Assumptions and limitations
+Recorded in `IMPLEMENTATION_PLAN.md` §6-7 and `README.md` §12.5. The ones a reviewer should weigh most:
+demo-mode artifacts are keyword rules, not understanding; LLM mode is synchronous (five model calls per
+request); the reviewer name is self-declared because admin is one shared credential; LLM artifact quality
+has not been evaluated.
+
+### Verification
+| Item | Value |
+|---|---|
+| Date | 2026-11-01 |
+| Tree verified | Commit `da3d481` **plus the uncommitted working-tree changes of this pass**. Not a clean single-commit checkout |
+| Java / Maven | 21.0.4 (Oracle) / 3.9.9 |
+| Command | `mvn clean verify` |
+| Baseline (before any change) | Tests run: 236, Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS |
+| Final | **Tests run: 322, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`), BUILD SUCCESS |
+| JaCoCo line coverage | **96.1%** (1,974/2,055) bundle-wide, clears the 0.80 gate. New `agentic` packages: 98.3% (1,026/1,044) |
+| Manual run | `mvn spring-boot:run -Dspring-boot.run.profiles=dev`, then curl: capabilities 200 (demo only); no key 401; tenant key 403; `mode: LLM` 503; demo run 201 with 6 COMPLETED stages; artifact 200; `report.md` `text/markdown`; review 200; second review 409 |
+| Live Anthropic API | **Not exercised.** `AnthropicLiveSmokeTest` was skipped |
+| Postman collection | Not extended for the agentic endpoints in this pass, and not re-run. The existing collection's URL-shortener requests are unchanged |

@@ -177,6 +177,18 @@
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
 
+        <!-- Official Anthropic Java SDK: backs the agentic SDLC orchestrator's
+             optional real-LLM mode (see agentic/llm/AnthropicLlmClient). Only
+             instantiated when app.agentic.llm.enabled=true — the default is
+             false, so the app never calls out to the API (or needs a key)
+             unless an operator explicitly turns it on, same posture as the
+             feature-flagged URL-safety Feign client above. -->
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>2.34.0</version>
+        </dependency>
+
         <!-- H2 in-memory DB -->
         <dependency>
             <groupId>com.h2database</groupId>

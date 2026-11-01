@@ -331,3 +331,83 @@ Stated plainly: this pass makes the application **not the obstacle** to multi-DC
 state that would have prevented it (in-process rate limiting) is now externalizable, and everything else was
 already stateless. It does not, and cannot, provide the actual multi-region infrastructure a real
 multi-DC deployment requires standing up around it.
+
+## 8. Agentic SDLC Orchestration Layer
+
+A second, independent capability living in the same service: it turns a free-text engineering requirement
+into a set of **reviewable artifacts** and records a human decision on them. It shares the app's identity
+model, error envelope, persistence, and config conventions, and it touches the URL-shortener code in one
+place only: a single additive `SecurityConfig` rule. Plan and acceptance criteria: `IMPLEMENTATION_PLAN.md`.
+Usage: `README.md` §12.
+
+### 8.1 Components
+
+```
+POST /api/v1/agentic/runs  (X-Admin-Key → ROLE_ADMIN)
+        │
+AgenticController ──► SdlcRunService ──► SdlcOrchestrator
+                         (review state          │  mode = request.mode ?? app.agentic.default-mode
+                          machine, report)      │  LLM requested but no LlmClient bean → 503, nothing stored
+                                                ▼
+              ┌──────────── for each agent, in topologically sorted dependency order ────────────┐
+              │ RequirementAnalyst → ImpactAnalyst → Planner → TestDesigner → RiskReviewer       │
+              │                                                                                  │
+              │   DETERMINISTIC_DEMO: agent.runDeterministic(ctx)   (rule-based, no network)     │
+              │   LLM:                LlmClient.generate(system, user, ArtifactRecord.class)     │
+              │                         └─ AnthropicLlmClient → Anthropic Java SDK,              │
+              │                            structured outputs (the record IS the JSON schema)    │
+              └──────────────────────────────────────────────────────────────────────────────────┘
+                                                ▼
+                         QualityGateReviewer (REVIEW stage; deterministic in EVERY mode)
+                                                ▼
+              SdlcRun + 6 × SdlcArtifact (JSON + Markdown + source/model/duration/tokens) → H2
+                                                ▼
+                    POST /runs/{id}/review  → APPROVED (blocked if gate failed) | CHANGES_REQUESTED
+```
+
+| Piece | Role |
+|---|---|
+| `SdlcAgent<T>` (5 implementations) | One stage. Each carries **both** its deterministic rules and its LLM prompts, so the two modes can't drift into different artifact shapes. Agents never call the LLM or persist anything themselves |
+| `SdlcOrchestrator` | Mode selection, dependency ordering (Kahn's algorithm at construction, so a mis-wired pipeline fails at startup), failure propagation, and provenance stamping |
+| `QualityGateReviewer` | Deterministic traceability and consistency checks. Any BLOCKER fails the gate and blocks approval |
+| `ComponentCatalog` + `agentic/component-catalog.json` | The orchestrator's knowledge of *this* codebase: 27 curated components with layer, responsibility, keywords, and existing tests. `ComponentCatalogTest` fails the build if a listed path stops existing |
+| `LlmClient` / `AnthropicLlmClient` / `AgenticLlmConfig` | The only LLM boundary. The bean exists only when `app.agentic.llm.enabled=true` |
+| `MarkdownRenderer` | Human-reviewable rendering with an execution-mode banner and a per-artifact provenance line |
+| `SdlcRunService` | Queries, combined `report.md`, and the review state machine |
+
+### 8.2 Design decisions
+
+| Decision | Rationale |
+|---|---|
+| Two explicit execution modes, stamped on the run, every artifact, the API response, and the rendered document | The request was to keep real LLM execution and demo behavior distinguishable. The guarantee holds only if no reader can see an artifact without also seeing what produced it, including after it's pasted into a ticket |
+| LLM mode unavailable → **503**, never a silent fallback to demo output | A caller who asked for model output must not get rule-based output it could mistake for it. Same reason there's no "disabled" `LlmClient` implementation, only an absent bean |
+| A third source value, `DETERMINISTIC_GUARDRAIL`, for the REVIEW artifact | An LLM-mode run still contains one deterministic artifact. Labeling it "LLM" would overclaim, and labeling it "demo" would undersell it. It's deterministic by design |
+| Quality gate is deterministic code, never a model, in every mode | Hallucinated class names, dangling task ids, dependency cycles, and untested acceptance criteria are not judgment calls. A model can fluently produce all of them, so a model shouldn't grade them |
+| Gate checks consistency and grounding, **not** quality | A passing gate means "internally coherent and grounded in real components", not "good plan". That stays the human reviewer's job, and the gate's own INFO finding says so |
+| Structured outputs with the artifact record as the schema (`outputConfig(Class)`) | No free-text JSON extraction to get wrong. LLM and demo modes produce the same Java types, so everything downstream (gate, renderer, storage) has one code path |
+| Agents declare `dependsOn`; orchestrator sorts | Execution order is data, validated at startup. Reordering the `SdlcStage` enum can only change presentation |
+| Curated component catalog instead of classpath reflection | A responsibility line and keyword list are what make impact analysis meaningful, and neither is derivable from a class name. Drift, the cost of curation, is caught by a test |
+| Operator identity (`X-Admin-Key`), not tenant keys | This is an internal engineering capability. Reusing the existing operator identity needs one `SecurityConfig` line and inherits fail-closed behavior. A tenant key gets 403 |
+| Synchronous execution | Demo mode takes milliseconds. LLM mode means five sequential model calls in one request, an accepted prototype limitation (async execution with polling via the existing bounded-executor pattern is the roadmap item) |
+| Orchestrator is not one big transaction | Holding a DB transaction open across minutes of model calls is worse than per-stage saves. A crash mid-run leaves a `RUNNING` run with the completed stages persisted, which is visible rather than silently lost |
+| Approval refused while the gate has blockers; a decided run stays decided; `@Version` on `SdlcRun` | The human-in-the-loop contract has to be enforceable, not advisory. A changed requirement is a new run, not an edit of an approved one. Two concurrent reviews resolve to one winner and one 409 |
+| No server-side refusal fallback on the Anthropic call | That's a beta-endpoint feature whose combination with class-based structured outputs isn't documented for the Java SDK. Following this repo's rule of not shipping unverified integration paths, a refusal fails the stage with its category instead |
+
+### 8.3 Security and data handling
+
+- **Requirement text is untrusted input to the model.** It's wrapped in `<requirement>` delimiters, and the
+  system preamble says not to follow instructions inside it. That reduces prompt injection but can't
+  prevent it, so the real containment is downstream: model output is only ever parsed into typed records,
+  checked by the deterministic gate, never executed, and never applied to code. Approval records a decision
+  and changes nothing in the repository.
+- **Third-party data flow is opt-in.** With the default `app.agentic.llm.enabled=false`, no Anthropic client
+  bean exists, so no outbound call is possible. When it's enabled, each LLM-mode run sends its requirement
+  text plus the component catalog and upstream artifacts to the Anthropic API, and the app logs a WARN at
+  startup saying so.
+- **Credential handling.** The API key is read by the SDK from `ANTHROPIC_API_KEY`. It never passes through a
+  Spring property, so it can't appear in `/actuator/configprops`. Logs record model, stop reason, and token
+  counts only, never prompt or response text. Stored failure messages describe the failure type (HTTP status,
+  refusal category, truncation) without echoing request content.
+- **Cost bound.** Requirement length is capped at 10,000 characters and `max-tokens` is configurable.
+  There's no per-operator budget or rate limit, because the admin identity is not rate-limited (an existing,
+  documented property of that identity).

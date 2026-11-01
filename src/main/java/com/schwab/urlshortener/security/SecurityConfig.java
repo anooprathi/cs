@@ -100,6 +100,10 @@ public class SecurityConfig {
                         // Admin surface — a distinct role, checked before the broader tenant rule below
                         // since Spring Security's DSL matches rules in declaration order.
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        // Agentic SDLC orchestrator: an internal engineering capability, so it uses
+                        // the operator identity, not tenant keys. It must come before the
+                        // /api/v1/** rule below, or any tenant key would be enough.
+                        .requestMatchers("/api/v1/agentic/**").hasRole("ADMIN")
                         // Everything else under the management API requires a tenant identity.
                         .requestMatchers("/api/v1/**").authenticated()
                         // Deliberately denyAll, not permitAll — see class Javadoc. Note for

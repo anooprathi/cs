@@ -29,6 +29,13 @@ cross-tenant visibility, and a production-readiness pass (async execution, ACID 
 multi-instance/multi-DC-ready rate limiting) — followed by an independent production review that correctly
 pushed back on several places where "informed by" had drifted toward sounding like "ready for."
 
+**Agentic SDLC layer, stated as plainly as the rest of this file:** the orchestrator (README §12) runs end to
+end in its default `DETERMINISTIC_DEMO` mode. That mode is rule-based templates, **not AI analysis**, and
+every artifact it produces says so. Its real-LLM mode (Claude via the official Anthropic Java SDK) is
+implemented and tested at the SDK boundary with a mocked client. It has **not** been run against the live
+API as part of this repository's verification. The opt-in smoke test that would do so is
+`AnthropicLiveSmokeTest`.
+
 **Read these in this order:**
 1. This file — orientation and evaluation-criteria mapping.
 2. `README.md` — setup, how to run, full curl walkthrough for every endpoint.
@@ -45,6 +52,7 @@ pushed back on several places where "informed by" had drifted toward sounding li
 | Three scenarios: greenfield, brownfield, ambiguous | `ENGINEERING_SUMMARY.md` §1-3 |
 | Setup instructions | README §3 |
 | Testing approach, limitations, trade-offs | README §9, ENGINEERING_SUMMARY.md §5, and the "Addendum" sections throughout that file |
+| Agentic SDLC orchestration layer (requirement → reviewable artifacts) | Plan: `IMPLEMENTATION_PLAN.md`. Usage and exact validation status: README §12 (§12.4 separates what's tested against a real model from what's tested against stubs). Design: ARCHITECTURE.md §8. Execution log: ENGINEERING_SUMMARY.md §17. Real sample output: `docs/agentic-sample-report.md` |
 
 ## 3. How to verify this submission
 

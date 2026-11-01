@@ -1,0 +1,221 @@
+{
+  "_comment": "Curated map of this repository's components, used by the agentic SDLC orchestrator for impact analysis (keyword matching in DETERMINISTIC_DEMO mode; grounding context sent to the model in LLM mode) and by the quality gate to reject unknown component names. ComponentCatalogTest fails the build if any path or test file listed here stops existing. Layers: DATA, SERVICE, CROSS_CUTTING, API, SECURITY, CONFIG (also the dependency order the demo planner uses).",
+  "components": [
+    {
+      "name": "UrlMapping",
+      "path": "src/main/java/com/schwab/urlshortener/entity/UrlMapping.java",
+      "layer": "DATA",
+      "responsibility": "JPA entity for a short link: shortCode, originalUrl, tenantId, expiry, click count, active flag (soft delete).",
+      "keywords": ["entity", "schema", "column", "field", "expir", "click count", "soft delete", "link"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/impl/UrlMappingMapperTest.java"]
+    },
+    {
+      "name": "UrlMappingRepository",
+      "path": "src/main/java/com/schwab/urlshortener/repository/UrlMappingRepository.java",
+      "layer": "DATA",
+      "responsibility": "Spring Data repository; every management query is tenant-scoped by (shortCode, tenantId); atomic click-count UPDATE.",
+      "keywords": ["query", "repository", "persist", "lookup", "search", "filter", "paginat"],
+      "tests": ["src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java"]
+    },
+    {
+      "name": "Tenant",
+      "path": "src/main/java/com/schwab/urlshortener/tenant/Tenant.java",
+      "layer": "DATA",
+      "responsibility": "Tenant entity: name, plan, hashed API key, active flag, custom domain.",
+      "keywords": ["tenant entity", "tenant field", "plan", "custom domain", "account"],
+      "tests": ["src/test/java/com/schwab/urlshortener/tenant/TenantServiceTest.java"]
+    },
+    {
+      "name": "UrlShortenerServiceImpl",
+      "path": "src/main/java/com/schwab/urlshortener/service/impl/UrlShortenerServiceImpl.java",
+      "layer": "SERVICE",
+      "responsibility": "Core business rules: create (custom alias / generated code), update, deactivate, reactivate, resolve-and-record-hit.",
+      "keywords": ["shorten", "short url", "short link", "create", "alias", "update", "deactivat", "reactivat", "expir", "link"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/UrlShortenerServiceImplTest.java"]
+    },
+    {
+      "name": "RandomBase62ShortCodeGenerator",
+      "path": "src/main/java/com/schwab/urlshortener/service/shortcode/RandomBase62ShortCodeGenerator.java",
+      "layer": "SERVICE",
+      "responsibility": "Generates random, non-enumerable Base62 short codes with bounded collision retry.",
+      "keywords": ["short code", "generat", "random", "collision", "base62"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/shortcode/RandomBase62ShortCodeGeneratorTest.java"]
+    },
+    {
+      "name": "CachedShortCodeLookup",
+      "path": "src/main/java/com/schwab/urlshortener/service/impl/CachedShortCodeLookup.java",
+      "layer": "SERVICE",
+      "responsibility": "Caffeine-cached short-code resolution on the redirect hot path, with eviction on change.",
+      "keywords": ["cache", "redirect", "latency", "hot path"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/impl/CachedShortCodeLookupCachingTest.java"]
+    },
+    {
+      "name": "ExpiredUrlCleanupService",
+      "path": "src/main/java/com/schwab/urlshortener/service/impl/ExpiredUrlCleanupService.java",
+      "layer": "SERVICE",
+      "responsibility": "Scheduled batch deactivation of expired links.",
+      "keywords": ["expir", "cleanup", "schedul", "sweep", "batch"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/impl/ExpiredUrlCleanupServiceTest.java"]
+    },
+    {
+      "name": "FeignUrlSafetyChecker",
+      "path": "src/main/java/com/schwab/urlshortener/service/safety/FeignUrlSafetyChecker.java",
+      "layer": "SERVICE",
+      "responsibility": "Feature-flagged external URL-reputation check (OpenFeign); fails open on error.",
+      "keywords": ["safety", "malicious", "phishing", "malware", "deny-list", "denylist", "blocklist", "reputation", "abuse"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/safety/FeignUrlSafetyCheckerTest.java"]
+    },
+    {
+      "name": "TenantService",
+      "path": "src/main/java/com/schwab/urlshortener/tenant/TenantService.java",
+      "layer": "SERVICE",
+      "responsibility": "Tenant registration, API-key authentication and rotation, plan and status changes.",
+      "keywords": ["tenant registration", "registration", "register", "api key", "rotat", "plan", "suspend"],
+      "tests": ["src/test/java/com/schwab/urlshortener/tenant/TenantServiceTest.java"]
+    },
+    {
+      "name": "AdminService",
+      "path": "src/main/java/com/schwab/urlshortener/admin/AdminService.java",
+      "layer": "SERVICE",
+      "responsibility": "Cross-tenant operator views and mutations, composed over the tenant/url/usage aggregates.",
+      "keywords": ["admin", "operator", "cross-tenant", "all tenants"],
+      "tests": ["src/test/java/com/schwab/urlshortener/admin/AdminServiceTest.java"]
+    },
+    {
+      "name": "TenantRateLimiterService",
+      "path": "src/main/java/com/schwab/urlshortener/ratelimit/TenantRateLimiterService.java",
+      "layer": "SERVICE",
+      "responsibility": "Per-tenant fair-share token buckets (api and redirect families), local or Redis backend.",
+      "keywords": ["rate limit", "throttl", "quota", "noisy neighbor", "fair share", "burst"],
+      "tests": ["src/test/java/com/schwab/urlshortener/ratelimit/TenantRateLimiterServiceTest.java"]
+    },
+    {
+      "name": "UsageMeteringService",
+      "path": "src/main/java/com/schwab/urlshortener/billing/UsageMeteringService.java",
+      "layer": "SERVICE",
+      "responsibility": "Async per-tenant, per-month counting of billable events (create + redirect).",
+      "keywords": ["usage", "meter", "billable", "usage count"],
+      "tests": ["src/test/java/com/schwab/urlshortener/billing/UsageMeteringServiceTest.java"]
+    },
+    {
+      "name": "BillingService",
+      "path": "src/main/java/com/schwab/urlshortener/billing/BillingService.java",
+      "layer": "SERVICE",
+      "responsibility": "Rates usage into a statement: base fee + included quota + overage, integer cents.",
+      "keywords": ["billing", "bill", "charge", "price", "pricing", "overage", "cost", "statement"],
+      "tests": ["src/test/java/com/schwab/urlshortener/billing/BillingServiceTest.java"]
+    },
+    {
+      "name": "InvoiceService",
+      "path": "src/main/java/com/schwab/urlshortener/billing/InvoiceService.java",
+      "layer": "SERVICE",
+      "responsibility": "Freezes a statement into an immutable invoice, one per (tenant, period).",
+      "keywords": ["invoice", "billing period"],
+      "tests": ["src/test/java/com/schwab/urlshortener/billing/InvoiceServiceTest.java"]
+    },
+    {
+      "name": "InvoicePdfGenerator",
+      "path": "src/main/java/com/schwab/urlshortener/billing/InvoicePdfGenerator.java",
+      "layer": "SERVICE",
+      "responsibility": "Renders an issued invoice as a PDF (OpenPDF).",
+      "keywords": ["pdf", "download"],
+      "tests": ["src/test/java/com/schwab/urlshortener/billing/InvoicePdfGeneratorTest.java"]
+    },
+    {
+      "name": "SdlcOrchestrator",
+      "path": "src/main/java/com/schwab/urlshortener/agentic/SdlcOrchestrator.java",
+      "layer": "SERVICE",
+      "responsibility": "Runs the agentic SDLC pipeline that turns a requirement into reviewable artifacts.",
+      "keywords": ["agentic", "sdlc", "orchestrat", "artifact", "pipeline"],
+      "tests": ["src/test/java/com/schwab/urlshortener/agentic/SdlcOrchestratorTest.java"]
+    },
+    {
+      "name": "GlobalExceptionHandler",
+      "path": "src/main/java/com/schwab/urlshortener/exception/GlobalExceptionHandler.java",
+      "layer": "CROSS_CUTTING",
+      "responsibility": "Single place every error becomes the shared JSON error envelope; never leaks internals.",
+      "keywords": ["error", "exception", "invalid", "reject", "fail", "status code"],
+      "tests": ["src/test/java/com/schwab/urlshortener/exception/GlobalExceptionHandlerTest.java"]
+    },
+    {
+      "name": "RedirectController",
+      "path": "src/main/java/com/schwab/urlshortener/controller/RedirectController.java",
+      "layer": "API",
+      "responsibility": "Public, unauthenticated GET /{shortCode} redirect (302) hot path.",
+      "keywords": ["redirect", "public", "visit", "302", "hot path"],
+      "tests": ["src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java"]
+    },
+    {
+      "name": "UrlShortenerController",
+      "path": "src/main/java/com/schwab/urlshortener/controller/UrlShortenerController.java",
+      "layer": "API",
+      "responsibility": "Tenant-authenticated /api/v1/urls management API: create, list, stats, update, reactivate, deactivate.",
+      "keywords": ["endpoint", "api", "rest", "stats", "statistic", "analytics", "list", "management"],
+      "tests": ["src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java"]
+    },
+    {
+      "name": "UrlDtos",
+      "path": "src/main/java/com/schwab/urlshortener/dto",
+      "layer": "API",
+      "responsibility": "Request/response records with Bean Validation (ShortenUrlRequest, UpdateUrlRequest, UrlStatsResponse, ...).",
+      "keywords": ["request", "response", "payload", "validat", "field"],
+      "tests": ["src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java"]
+    },
+    {
+      "name": "AdminController",
+      "path": "src/main/java/com/schwab/urlshortener/admin/AdminController.java",
+      "layer": "API",
+      "responsibility": "Operator-only /api/v1/admin/** endpoints (X-Admin-Key).",
+      "keywords": ["admin", "operator"],
+      "tests": ["src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java"]
+    },
+    {
+      "name": "SecurityConfig",
+      "path": "src/main/java/com/schwab/urlshortener/security/SecurityConfig.java",
+      "layer": "SECURITY",
+      "responsibility": "Stateless filter chain; explicit per-route rules ending in denyAll().",
+      "keywords": ["authoriz", "access", "permission", "role", "secur", "authenticat", "endpoint"],
+      "tests": ["src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java"]
+    },
+    {
+      "name": "ApiKeyAuthenticationFilter",
+      "path": "src/main/java/com/schwab/urlshortener/security/ApiKeyAuthenticationFilter.java",
+      "layer": "SECURITY",
+      "responsibility": "Resolves X-API-Key to a TenantPrincipal; rejects a presented-but-invalid key with 401.",
+      "keywords": ["api key", "authenticat", "credential", "header"],
+      "tests": ["src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java"]
+    },
+    {
+      "name": "RateLimitFilter",
+      "path": "src/main/java/com/schwab/urlshortener/ratelimit/RateLimitFilter.java",
+      "layer": "SECURITY",
+      "responsibility": "Consumes one api token per authenticated tenant request; 429 with Retry-After when exhausted.",
+      "keywords": ["rate limit", "429", "throttl"],
+      "tests": ["src/test/java/com/schwab/urlshortener/ratelimit/TenantRateLimiterServiceTest.java"]
+    },
+    {
+      "name": "ApplicationProperties",
+      "path": "src/main/resources/application.properties",
+      "layer": "CONFIG",
+      "responsibility": "Common config plus per-profile overrides (dev/prod/test); feature flags and plan limits.",
+      "keywords": ["config", "property", "properties", "feature flag", "flag", "setting", "toggle"],
+      "tests": ["src/test/java/com/schwab/urlshortener/config/PlanConfigBindingTest.java"]
+    },
+    {
+      "name": "AsyncConfig",
+      "path": "src/main/java/com/schwab/urlshortener/config/AsyncConfig.java",
+      "layer": "CONFIG",
+      "responsibility": "Bounded executor for @Async work off the request path.",
+      "keywords": ["async", "background", "executor", "thread"],
+      "tests": ["src/test/java/com/schwab/urlshortener/config/AsyncConfigTest.java"]
+    },
+    {
+      "name": "CacheConfig",
+      "path": "src/main/java/com/schwab/urlshortener/config/CacheConfig.java",
+      "layer": "CONFIG",
+      "responsibility": "Caffeine caches with per-cache size/TTL.",
+      "keywords": ["cache", "ttl"],
+      "tests": ["src/test/java/com/schwab/urlshortener/service/impl/CachedShortCodeLookupCachingTest.java"]
+    }
+  ]
+}

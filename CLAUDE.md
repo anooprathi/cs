@@ -23,6 +23,9 @@ mvn test -Dtest=ClassName#methodName             # run a single test method
 mvn spring-boot:run -Dspring-boot.run.profiles=dev    # H2 console, seeded demo tenants (keys printed to console log)
 mvn spring-boot:run -Dspring-boot.run.profiles=prod   # production-shaped config
 
+# Opt-in live Anthropic API smoke test for the agentic LLM mode. It COSTS MONEY and is skipped by default:
+AGENTIC_LIVE_SMOKE=true ANTHROPIC_API_KEY=... mvn test -Dtest=AnthropicLiveSmokeTest -Djacoco.skip=true
+
 # Postman/Newman collection (postman/url-shortener.postman_collection.json) against a running dev instance:
 newman run postman/url-shortener.postman_collection.json
 ```
@@ -106,6 +109,14 @@ redirect path.
 wired extension point but **feature-flagged off by default** (no external service to call in this
 environment) — it fails open (treats URL as safe) on error/timeout rather than blocking creation on a
 third-party outage.
+
+**Agentic SDLC orchestrator** (`agentic/`, `/api/v1/agentic/**`, operator `X-Admin-Key` only) turns a
+free-text requirement into reviewable artifacts (requirements → impact → plan → tests → risks → deterministic
+quality gate) plus a recorded human review. Two execution modes that must never be confused:
+`DETERMINISTIC_DEMO` (default, rule-based, no network, not AI) and `LLM` (Claude via the official Anthropic
+Java SDK with structured outputs, off unless `app.agentic.llm.enabled=true` and `ANTHROPIC_API_KEY` is set;
+otherwise 503, never a fallback). See `agentic/CLAUDE.md`, `README.md` §12 (including exactly what has and
+hasn't been validated against a live model), and `IMPLEMENTATION_PLAN.md`.
 
 **`GlobalExceptionHandler`** (`@RestControllerAdvice`) is the single place every error response gets mapped
 to the shared JSON envelope (`timestamp`/`status`/`error`/`message`/`path`/`details`) — internal exception
