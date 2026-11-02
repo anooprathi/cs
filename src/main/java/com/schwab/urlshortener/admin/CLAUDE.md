@@ -30,9 +30,3 @@ making it inoperable. If you touch this method, keep that conditional; see
 
 `listTenantUrls` and `getTenantDetail` call `tenantService.getTenantById` before touching links/usage so an
 unknown tenant id 404s cleanly rather than returning an empty page indistinguishable from "zero links."
-
-`RateLimitBurstTest.java` in this directory is a stray manual test script (a `main()` method hitting
-`localhost:8080` with a hardcoded API key) — it is not part of the admin feature set, isn't wired into the
-Spring context, and doesn't belong under `main/java` (it's untracked in git). Don't treat it as documented
-admin functionality or extend it; if cleaning up the package, it's a candidate for deletion or relocation
-to a scratch/manual-testing location outside `src/main`.
