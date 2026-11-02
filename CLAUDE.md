@@ -26,7 +26,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=prod   # production-shaped config
 # Opt-in live Anthropic API smoke test for the agentic LLM mode. It COSTS MONEY and is skipped by default:
 AGENTIC_LIVE_SMOKE=true ANTHROPIC_API_KEY=... mvn test -Dtest=AnthropicLiveSmokeTest -Djacoco.skip=true
 
-# Postman/Newman collection (postman/url-shortener.postman_collection.json) against a running dev instance:
+# Postman/Newman collection (postman/url-shortener.postman_collection.json) against a FRESHLY STARTED dev instance
+# (folders 0-7 register fixed tenant names; folders 8-9 cover /api/v1/agentic and /api/v1/workflows and self-poll async runs):
 newman run postman/url-shortener.postman_collection.json
 ```
 

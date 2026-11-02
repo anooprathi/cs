@@ -965,5 +965,13 @@ Each run's final engineering summary (the first part of `GET /api/v1/workflows/r
 - assumptions: approved, but not confirmed by the requirement owner;
 - what the run did not do.
 
+**Postman.** Folders `8. Agentic SDLC` and `9. Workflow Orchestrator` in
+`postman/url-shortener.postman_collection.json` walk both APIs end to end with assertions. Folder 9 runs a
+greenfield run through approval, promotion, re-planning, and compensation, plus an ambiguous run through
+clarification and rejection. Runs are asynchronous, so the poll requests re-run themselves while a run is
+RUNNING. That works in the Collection Runner and in `newman run postman/url-shortener.postman_collection.json`;
+sent by hand, press Send until the status changes. Run the whole collection against a freshly started dev
+instance, because folders 0–7 register fixed tenant names.
+
 Docs: `docs/architecture.md`, `docs/orchestration.md` (API table), `docs/governance.md`, `docs/demo-scenarios.md`,
 `docs/limitations-and-tradeoffs.md`, `SUBMISSION_NOTES.md`.

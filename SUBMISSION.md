@@ -91,7 +91,7 @@ Walkthrough with every check: `docs/demo-scenarios.md`.
 | Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | Exit 0. Evidence checks: greenfield **11/11**, brownfield **10/10**, ambiguous **7/7**. Reports copied to `docs/demo-output/` |
 | Real tests inside the scenarios | Greenfield: `mvn -B -o test` on `ClickLimitIntegrationTest` plus 4 plan classes in the patched worktree, Maven reported **Tests run: 106, Failures: 0, Errors: 0, Skipped: 0**. Brownfield: `ExpiredLinkReactivationIntegrationTest` plus 3 plan classes, **Tests run: 80, Failures: 0, Errors: 0, Skipped: 0** |
 | Application smoke test | Not re-run by hand in this pass. `WorkflowApiIntegrationTest` and `UrlShortenerIntegrationTest` drive the real HTTP stack through MockMvc |
-| Postman / Newman (`postman/url-shortener.postman_collection.json`, 62 requests) | **Not run in this pass.** Newman isn't installed in the verification environment. The collection covers the URL-shortener API only, not the workflow API |
+| Postman / Newman (`postman/url-shortener.postman_collection.json`, 106 requests in 12 folders) | `newman run` (Newman 6.2.3) against a freshly started dev instance: **180 assertions, 0 failures**. That covers the URL-shortener folders 0–7, plus new folders `8. Agentic SDLC` (10 requests) and `9. Workflow Orchestrator` (34 requests: a full greenfield run through approval, promotion, re-planning, and compensation, plus an ambiguous run through clarification and rejection; async runs are polled). Folders 0–7 register fixed tenant names, so they need a fresh instance; folders 8–9 also pass on a re-run |
 | Live Anthropic API | **Not run** (`AnthropicLiveSmokeTest` skipped) |
 | OWASP dependency-check | **Not run** (needs a multi-gigabyte NVD download) |
 

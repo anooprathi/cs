@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "URL Shortener API",
-    "description": "Multi-tenant URL shortener \u2014 AI-Assisted Engineering Assignment (Charles Schwab). Run the '0. Setup' request first (or the Collection Runner on the whole collection top-to-bottom) \u2014 it captures apiKey automatically for every other request via the {{apiKey}} collection variable.",
+    "description": "Multi-tenant URL shortener \u2014 AI-Assisted Engineering Assignment (Charles Schwab). Run the '0. Setup' request first (or the Collection Runner on the whole collection top-to-bottom) \u2014 it captures apiKey automatically for every other request via the {{apiKey}} collection variable. Folders '8. Agentic SDLC' and '9. Workflow Orchestrator' need only {{adminKey}} (operator identity). Workflow runs are asynchronous: their poll requests re-run themselves while a run is RUNNING, which works in the Collection Runner and Newman.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -74,6 +74,38 @@
       "key": "oldApiKey3BeforeRotation",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "agenticRunId",
+      "value": ""
+    },
+    {
+      "key": "wfRunId",
+      "value": ""
+    },
+    {
+      "key": "wfRun2Id",
+      "value": ""
+    },
+    {
+      "key": "wfPolls",
+      "value": ""
+    },
+    {
+      "key": "wfReadinessVersion",
+      "value": ""
+    },
+    {
+      "key": "wfPatchVersion",
+      "value": ""
+    },
+    {
+      "key": "wfSpecVersion",
+      "value": ""
+    },
+    {
+      "key": "wfProbeTenantKey",
+      "value": ""
     }
   ],
   "item": [
@@ -2735,6 +2767,2074 @@
               ]
             },
             "description": "Self-contained rate-limit test -- see the Tests script. Just run this ONE request normally (Send, or as part of a full collection run) -- no special Collection Runner setup needed. Fires a 30-request burst against {{apiKey}} via pm.sendRequest from within the test script itself."
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Agentic SDLC (single-pass preview)",
+      "description": "The lightweight, synchronous preview (README \u00a712): one POST produces six planning artifacts (requirements, impact, plan, tests, risks, deterministic quality gate) and one human review. No side effects. Operator identity only: X-Admin-Key ({{adminKey}}); a tenant key gets 403. Default mode DETERMINISTIC_DEMO is rule-based, not AI; LLM mode is refused with 503 unless enabled.",
+      "item": [
+        {
+          "name": "GET Agentic Capabilities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('demo mode is available and is the default', () => {",
+                  "    pm.expect(body.availableModes).to.include('DETERMINISTIC_DEMO');",
+                  "    pm.expect(body.defaultMode).to.eql('DETERMINISTIC_DEMO');",
+                  "});",
+                  "pm.test('stages and catalog are reported', () => {",
+                  "    pm.expect(body.stages.length).to.be.greaterThan(0);",
+                  "    pm.expect(body.catalogComponentCount).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "capabilities"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Agentic Capabilities without key (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401 (operator identity required)', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "capabilities"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Agentic Run (demo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('agenticRunId', body.id);",
+                  "pm.test('run is a labeled demo run awaiting review', () => {",
+                  "    pm.expect(body.executionMode).to.eql('DETERMINISTIC_DEMO');",
+                  "    pm.expect(body.executionNotice).to.include('no language model was called');",
+                  "    pm.expect(body.status).to.eql('AWAITING_REVIEW');",
+                  "    pm.expect(body.stages).to.have.length(6);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Max-click limit for short links\",\n  \"requirement\": \"Tenants must be able to set an optional maximum click limit when creating a short link.\\nWhen the click limit is reached, the redirect must return 410 Gone.\\nA click limit below 1 must be rejected with 400 Bad Request.\\nThe stats endpoint must show the remaining clicks for each link.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET Agentic Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('same run', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('agenticRunId'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs/{{agenticRunId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs",
+                "{{agenticRunId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Agentic Runs (paged)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('page has content', () => pm.expect(pm.response.json().content.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Agentic Artifact (IMPACT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('typed content plus rendered markdown', () => {",
+                  "    pm.expect(body.content.impactedComponents.length).to.be.greaterThan(0);",
+                  "    pm.expect(body.markdown).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs/{{agenticRunId}}/artifacts/IMPACT",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs",
+                "{{agenticRunId}}",
+                "artifacts",
+                "IMPACT"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Agentic Report (markdown)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('markdown with the execution-mode banner', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/markdown');",
+                  "    pm.expect(pm.response.text()).to.include('DETERMINISTIC_DEMO');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs/{{agenticRunId}}/report.md",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs",
+                "{{agenticRunId}}",
+                "report.md"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Agentic Review CHANGES_REQUESTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('review recorded', () => pm.expect(pm.response.json().review.reviewer).to.eql('postman-reviewer'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs/{{agenticRunId}}/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs",
+                "{{agenticRunId}}",
+                "review"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"CHANGES_REQUESTED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"Confirm the latency target first.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Agentic Review again (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409 (a run is reviewed exactly once)', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs/{{agenticRunId}}/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs",
+                "{{agenticRunId}}",
+                "review"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"second try\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Agentic Run in LLM mode while disabled (503)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 503 (never a silent fallback to demo output)', () => pm.response.to.have.status(503));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"t\",\n  \"requirement\": \"r\",\n  \"mode\": \"LLM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Workflow Orchestrator",
+      "description": "The full SDLC orchestrator (README \u00a713): a 7-stage dependency graph with gates, parallel stages, persistent state, version-bound human approvals, re-planning, isolated git worktrees, audit and metrics. Operator identity only (X-Admin-Key). Runs are ASYNCHRONOUS: the 'poll' requests re-run themselves every 2 s while the run is RUNNING, which works in the Collection Runner and Newman; sent by hand, press Send until it settles.\n\nFlow: create the greenfield click-limit run -> start -> poll to the release checkpoint -> inspect the patch (a DETERMINISTIC_DEMO code recipe: real code, NOT AI), contract, tests, lineage -> a stale decision is refused (409) -> approve the exact readiness version -> promote the patch to a LOCAL branch -> reports, audit, metrics -> amend the requirement (formatting only) and resume: unaffected work is reused and the approval stays valid -> compensate the promotion. Then an ambiguous run stops at the clarification checkpoint and is rejected.\n\ntestExecution is PLAN_VERIFICATION here (fast, runs no product tests). Change it to COMMAND to run real 'mvn -o test' in the worktree (1-3 min; needs a warm local Maven repository).",
+      "item": [
+        {
+          "name": "GET Workflow Capabilities",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('seven stage agents with their gates and tools', () => {",
+                  "    pm.expect(body.agents).to.have.length(7);",
+                  "    pm.expect(body.agents.map(a => a.key)).to.include.members(['requirement-analysis', 'implementation', 'release-readiness']);",
+                  "});",
+                  "pm.test('demo mode available; test runner reported', () => {",
+                  "    pm.expect(body.availableModes).to.include('DETERMINISTIC_DEMO');",
+                  "    pm.expect(body.testRunner).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "capabilities"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Workflow Capabilities with tenant key (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A FRESH tenant: earlier folders' tenants may have used up their rate limit ('7. Error Cases' does so on",
+                  "// purpose), and the rate limiter answers 429 before authorization could answer 403.",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/v1/tenants', method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ name: 'wf-probe-' + Date.now() }) }",
+                  "}, (err, res) => pm.collectionVariables.set('wfProbeTenantKey', err ? '' : res.json().apiKey));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a valid tenant key is never an operator key (403)', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{wfProbeTenantKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "capabilities"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Standard Workflow Definition",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('7 tasks; release requires approval', () => {",
+                  "    pm.expect(body.tasks).to.have.length(7);",
+                  "    pm.expect(body.tasks.find(t => t.key === 'release').requiresApproval).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/standard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                "standard"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Validate Cyclic Definition",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('graph validation rejects a cycle', () => {",
+                  "    pm.expect(body.valid).to.eql(false);",
+                  "    pm.expect(body.errors.map(e => e.code)).to.include('CYCLE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/definitions/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "definitions",
+                "validate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"cyclic\",\n  \"version\": 1,\n  \"tasks\": [\n    {\n      \"key\": \"a\",\n      \"agent\": \"requirement-analysis\",\n      \"dependsOn\": [\n        \"b\"\n      ]\n    },\n    {\n      \"key\": \"b\",\n      \"agent\": \"architecture-design\",\n      \"dependsOn\": [\n        \"a\"\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Workflow Run (greenfield click limits)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('wfRunId', body.id);",
+                  "pm.collectionVariables.set('wfPolls', 0);",
+                  "pm.test('created with the standard graph and its parallel layer', () => {",
+                  "    pm.expect(body.status).to.eql('CREATED');",
+                  "    pm.expect(body.executionMode).to.eql('DETERMINISTIC_DEMO');",
+                  "    pm.expect(body.testExecution).to.eql('PLAN_VERIFICATION');",
+                  "    pm.expect(body.parallelLayers).to.deep.include(['tests', 'security', 'docs']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Greenfield: click-limited short links\",\n  \"requirement\": \"Tenants must be able to set an optional maximum click limit when creating a short link.\\nWhen the click limit is reached, the redirect must return 410 Gone.\\nA click limit below 1 must be rejected with 400 Bad Request.\\nThe stats endpoint must show the remaining clicks for each link.\",\n  \"testExecution\": \"PLAN_VERIFICATION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Start Workflow Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202 (asynchronous)', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Workflow Run (poll to release checkpoint)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('waiting for the human release approval', () => pm.expect(run.status).to.eql('WAITING_APPROVAL'));",
+                  "    pm.test('every stage before release succeeded', () => {",
+                  "        ['requirements', 'design', 'implementation', 'tests', 'security', 'docs']",
+                  "            .forEach(k => pm.expect(run.tasks.find(t => t.key === k).state, k).to.eql('SUCCEEDED'));",
+                  "        pm.expect(run.tasks.find(t => t.key === 'release').state).to.eql('WAITING_APPROVAL');",
+                  "    });",
+                  "    const label = run.tasks.find(t => t.key === 'release').outputs['readiness-report'];",
+                  "    pm.test('release produced readiness-report', () => pm.expect(label).to.match(/@v\\d+/));",
+                  "    pm.collectionVariables.set('wfReadinessVersion', parseInt(label.split('@v')[1], 10));",
+                  "    console.log('readiness-report version for the decision:', label);",
+                  "    const patch = run.tasks.find(t => t.key === 'implementation').outputs['change-patch'];",
+                  "    pm.collectionVariables.set('wfPatchVersion', parseInt(patch.split('@v')[1], 10));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Workflow Artifacts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const names = pm.response.json().map(a => a.name);",
+                  "pm.test('every stage output is a versioned artifact', () => pm.expect(names).to.include.members([",
+                  "    'requirement-spec', 'architecture-design', 'implementation-plan', 'change-patch', 'interface-contract',",
+                  "    'test-plan', 'test-report', 'risk-assessment', 'policy-report', 'documentation', 'readiness-report']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/artifacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "artifacts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Change Patch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const patch = pm.response.json().content;",
+                  "pm.test('real code from the click-limit DETERMINISTIC_DEMO recipe (not AI)', () => {",
+                  "    pm.expect(patch.kind).to.eql('CODE');",
+                  "    pm.expect(patch.author).to.eql('recipe:click-limit');",
+                  "    pm.expect(patch.notice).to.include('NOT AI-generated');",
+                  "    pm.expect(patch.testFiles.join(',')).to.include('ClickLimitIntegrationTest');",
+                  "});",
+                  "pm.test('applied in the isolated worktree and validated', () => {",
+                  "    pm.expect(patch.applied).to.eql(true);",
+                  "    pm.expect(patch.unifiedDiff).to.include('maxClicks');",
+                  "    pm.expect(patch.validation.every(v => v.passed)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/artifacts/change-patch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "artifacts",
+                "change-patch"
+              ]
+            },
+            "description": "Requires git and the dev profile's workspace (sandbox clone of this repository). The diff is the source of truth."
+          }
+        },
+        {
+          "name": "GET Interface Contract",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const contract = pm.response.json().content;",
+                  "pm.test('exact API and schema contract, with migration DDL', () => {",
+                  "    pm.expect(contract.source).to.eql('RECIPE');",
+                  "    pm.expect(contract.apiChanges.map(a => a.path)).to.include('/api/v1/urls');",
+                  "    pm.expect(contract.schemaChanges[0].ddl).to.include('max_clicks');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/artifacts/interface-contract",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "artifacts",
+                "interface-contract"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Test Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const report = pm.response.json().content;",
+                  "pm.test('plan verification ran and says it executed no product tests', () => {",
+                  "    pm.expect(report.runner).to.eql('plan-verification');",
+                  "    pm.expect(report.productTestsExecuted).to.eql(false);",
+                  "    pm.expect(report.failed).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/artifacts/test-report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "artifacts",
+                "test-report"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Readiness Lineage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('lineage names the exact input versions and the agent decisions', () => {",
+                  "    pm.expect(body.inputs.map(i => i.label).join(',')).to.include('change-patch@v');",
+                  "    pm.expect(body.agentResult.decisions.length).to.be.greaterThan(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/artifacts/readiness-report/lineage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "artifacts",
+                "readiness-report",
+                "lineage"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Release Decision on a stale version (409)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('staleVersion', Number(pm.collectionVariables.get('wfReadinessVersion')) + 1);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a decision must name the exact version the reviewer saw', () => pm.response.to.have.status(409));",
+                  "pm.test('explains the stale review', () => pm.expect(pm.response.json().message).to.include('Stale review'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/tasks/release/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "tasks",
+                "release",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"wrong version on purpose\",\n  \"artifactVersions\": {\n    \"readiness-report\": \"{{staleVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Release Decision APPROVED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('approval recorded against the exact readiness version', () => {",
+                  "    const a = pm.response.json().approvals.find(x => x.task === 'release' && x.decision === 'APPROVED');",
+                  "    pm.expect(a.reviewer).to.eql('postman-reviewer');",
+                  "    pm.expect(a.artifact).to.include('readiness-report@v' + pm.collectionVariables.get('wfReadinessVersion'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/tasks/release/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "tasks",
+                "release",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"Readiness checklist reviewed.\",\n  \"artifactVersions\": {\n    \"readiness-report\": \"{{wfReadinessVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET Workflow Run (poll to SUCCEEDED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('run SUCCEEDED after the approval', () => pm.expect(run.status).to.eql('SUCCEEDED'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Promote Patch to a local branch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const promotion = pm.response.json().promotion;",
+                  "pm.test('committed to a LOCAL branch in the sandbox clone (never pushed)', () => {",
+                  "    pm.expect(promotion.branch).to.match(/^workflow\\/run-/);",
+                  "    pm.expect(promotion.promotedBy).to.eql('postman-reviewer');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/promotion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "promotion"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"Promote the approved patch for review.\",\n  \"patchVersion\": \"{{wfPatchVersion}}\",\n  \"confirm\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET Run Report (markdown)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const md = pm.response.text();",
+                  "pm.test('final engineering summary sections', () => {",
+                  "    ['Final engineering summary', '### What was built', '### Plan and rationale', '### Risks and trade-offs', '### Assumptions']",
+                  "        .forEach(s => pm.expect(md, s).to.include(s));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/report.md",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "report.md"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Run Timeline (markdown)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('timeline is markdown with the mode banner', () => pm.expect(pm.response.text()).to.include('Execution mode: DETERMINISTIC_DEMO'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/timeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "timeline"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Audit History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const events = pm.response.json();",
+                  "pm.test('append-only audit trail of the whole run', () => {",
+                  "    pm.expect(events[0].type).to.eql('RUN_CREATED');",
+                  "    pm.expect(events.map(e => e.type)).to.include.members(['ENTRY_GATE_PASSED', 'EXIT_GATE_PASSED', 'APPROVED', 'PATCH_PROMOTED']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Audit Verify (hash chain)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('per-run SHA-256 hash chain is intact', () => pm.expect(pm.response.json().valid).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/audit/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "audit",
+                "verify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Run Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json();",
+                  "pm.test('reliability metrics with their definitions', () => {",
+                  "    pm.expect(m.runSuccessRate).to.eql(1);",
+                  "    pm.expect(m.definitions.mttr).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Metrics (all runs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('at least this run is counted', () => pm.expect(pm.response.json().runs).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT Amend Requirement (formatting only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('requirement revision recorded', () => pm.expect(pm.response.json().requirementRevision).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/requirement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "requirement"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"- Tenants must be able to set an optional maximum click limit when creating a short link.\\n- When the click limit is reached, the redirect must return 410 Gone.\\n- A click limit below 1 must be rejected with 400 Bad Request.\\n- The stats endpoint must show the remaining clicks for each link.\",\n  \"reason\": \"Reformat as a bulleted list (no content change).\",\n  \"actor\": \"postman-reviewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Resume Workflow Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202 (re-plan and continue)', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/resume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "resume"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Workflow Run (poll after re-plan)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('re-planned run SUCCEEDED again', () => pm.expect(run.status).to.eql('SUCCEEDED'));",
+                  "    pm.test('unaffected work was reused, not re-executed', () => pm.expect(run.tasks.filter(t => t.reused).length).to.be.at.least(3));",
+                  "    pm.test('the release approval is still VALID (same readiness version reused)', () =>",
+                  "        pm.expect(run.approvals.some(a => a.task === 'release' && a.status === 'VALID')).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Compensate Promotion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('local promotion branch removed', () => pm.expect(pm.response.json().promotion.compensatedAt).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRunId}}/promotion/compensate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRunId}}",
+                "promotion",
+                "compensate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actor\": \"postman-reviewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Workflow Run (ambiguous)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('wfRun2Id', pm.response.json().id);",
+                  "pm.collectionVariables.set('wfPolls', 0);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Ambiguous: safer links, more useful analytics\",\n  \"requirement\": \"Make links safer and analytics more useful.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Start Ambiguous Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Ambiguous Run (poll to clarification checkpoint)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('stopped for clarification', () => pm.expect(run.status).to.eql('WAITING_APPROVAL'));",
+                  "    pm.test('requirements waits for a human; nothing downstream started', () => {",
+                  "        pm.expect(run.tasks.find(t => t.key === 'requirements').state).to.eql('WAITING_APPROVAL');",
+                  "        pm.expect(run.tasks.find(t => t.key === 'design').state).to.eql('PENDING');",
+                  "    });",
+                  "    const label = run.tasks.find(t => t.key === 'requirements').outputs['requirement-spec'];",
+                  "    pm.test('requirements produced requirement-spec', () => pm.expect(label).to.match(/@v\\d+/));",
+                  "    pm.collectionVariables.set('wfSpecVersion', parseInt(label.split('@v')[1], 10));",
+                  "    console.log('requirement-spec version for the decision:', label);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Reject the Assumptions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('rejection recorded', () => pm.expect(pm.response.json().approvals.some(a => a.decision === 'REJECTED')).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/tasks/requirements/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "tasks",
+                "requirements",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECTED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"Too vague to build: define 'safer' and 'more useful' first.\",\n  \"artifactVersions\": {\n    \"requirement-spec\": \"{{wfSpecVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET Ambiguous Run (poll after rejection)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('a rejection is never retried automatically: the run FAILED', () => pm.expect(run.status).to.eql('FAILED'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Workspace Rollback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('rollback is audited', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('wfRun2Id'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/workspace/rollback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "workspace",
+                "rollback"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actor\": \"postman-reviewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Workflow Run with blank requirement (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"t\",\n  \"requirement\": \" \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Workflow Run in LLM mode while disabled (503)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 503 (never a silent fallback to demo output)', () => pm.response.to.have.status(503));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"t\",\n  \"requirement\": \"r r r\",\n  \"mode\": \"LLM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]

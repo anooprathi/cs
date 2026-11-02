@@ -898,3 +898,11 @@ this looks like a host-level pause rather than the code, but the cause wasn't es
 
 ### Verification
 See `SUBMISSION.md` §5 for this pass's `mvn clean verify` numbers and the scenario CLI results.
+
+**Postman follow-up.** The collection gained `8. Agentic SDLC` (10 requests) and `9. Workflow Orchestrator`
+(34 requests, with self-polling for async runs). Newman 6.2.3 against a freshly started dev instance gave
+180 assertions and 0 failures. The first run had one failure that was an ordering artifact, not a product
+bug: the "tenant key gets 403" probe reused folder 1's tenant, whose rate limit folder 7's burst test had
+just exhausted. The rate limiter answered 429 before authorization could answer 403. The probe now
+registers its own fresh tenant. A second run on the same instance fails only in the pre-existing folders
+0–7, which register fixed tenant names (409). Folders 8–9 pass on a re-run.

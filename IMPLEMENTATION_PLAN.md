@@ -176,3 +176,6 @@ Two of this plan's stated limitations no longer hold for the orchestrator:
 - §12.5 "Synchronous runs": orchestrator runs are asynchronous with polling.
 
 Both still hold for `/api/v1/agentic`, which is kept as the lightweight preview.
+
+T11's deviation (Postman not extended) was closed later. The collection now has `8. Agentic SDLC` and
+`9. Workflow Orchestrator` folders, verified with Newman (`SUBMISSION.md` §5).

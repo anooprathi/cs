@@ -133,6 +133,7 @@ from the previous pass and were not re-run.
 |---|---|
 | `mvn clean verify` | **405 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.1% (workflow packages 91.7%), clearing the 80% gate. BUILD SUCCESS |
 | Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree. Maven reported 106 and 80 tests, 0 failures |
+| Postman / Newman | 106-request collection, including new folders `8. Agentic SDLC` and `9. Workflow Orchestrator`, against a freshly started dev instance: 180 assertions, 0 failures |
 | Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 11/11, brownfield 10/10, ambiguous 7/7 evidence checks, exit 0. Reports in `docs/demo-output/` |
 | `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 27 `[serial]` (exceptions without `serialVersionUID`, same as the existing exception classes), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API), 1 annotation-processor notice |
 | SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 229 findings before fixes. Fixed 5 null-path and 2 map-iteration findings in new code; 224 remain: 213 `EI_EXPOSE_REP/REP2` (Spring/Lombok false positives), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 3 `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` (not re-triaged after the fixes), 1 format-string newline, 1 `DM_EXIT` (the CLI's exit code) |
