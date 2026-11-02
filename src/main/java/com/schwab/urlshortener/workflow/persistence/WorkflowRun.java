@@ -2,6 +2,7 @@ package com.schwab.urlshortener.workflow.persistence;
 
 import com.schwab.urlshortener.agentic.model.ExecutionMode;
 import com.schwab.urlshortener.workflow.engine.RunStatus;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -60,6 +61,10 @@ public class WorkflowRun {
 
     @Column(length = 100)
     private String model;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private TestExecution testExecution;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)

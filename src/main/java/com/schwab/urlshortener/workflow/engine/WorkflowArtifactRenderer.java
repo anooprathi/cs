@@ -5,6 +5,7 @@ import com.schwab.urlshortener.workflow.artifact.DocumentationBundle;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport;
 import com.schwab.urlshortener.workflow.artifact.ReadinessReport;
 import com.schwab.urlshortener.workflow.artifact.TestReport;
+import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import org.springframework.stereotype.Component;
 
@@ -53,6 +54,8 @@ public class WorkflowArtifactRenderer {
             return readiness(r);
         } else if (content instanceof ChangePatch p) {
             return patch(p);
+        } else if (content instanceof InterfaceContract c) {
+            return contract(c);
         }
         try {
             // agentic artifact types render with their own section headings; demote them one level
@@ -72,8 +75,13 @@ public class WorkflowArtifactRenderer {
         if (p.notice() != null) {
             sb.append("> ").append(cell(p.notice())).append(NL).append(NL);
         }
-        sb.append("Base commit `").append(p.baseCommit() == null ? "-" : p.baseCommit()).append("`, applied in isolated workspace: **")
+        sb.append("Kind **").append(p.kind()).append("**, author `").append(p.author()).append("`. Base commit `")
+                .append(p.baseCommit() == null ? "-" : p.baseCommit()).append("`, applied in isolated workspace: **")
                 .append(p.applied() ? "yes" : "no").append("**.").append(NL).append(NL);
+        if (!p.testFiles().isEmpty()) {
+            sb.append("Test sources in this patch: ").append(String.join(", ", p.testFiles().stream().map(f -> "`" + f + "`").toList()))
+                    .append(NL).append(NL);
+        }
         if (!p.policyViolations().isEmpty()) {
             sb.append("**Change-control violations (nothing was written):**").append(NL).append(NL);
             p.policyViolations().forEach(v -> sb.append("- ").append(cell(v)).append(NL));
@@ -100,6 +108,31 @@ public class WorkflowArtifactRenderer {
                     ? p.unifiedDiff().substring(0, 6000) + NL + "... (truncated; the full diff is in the artifact JSON)"
                     : p.unifiedDiff();
             sb.append("```diff").append(NL).append(diff.replace("```", "'''")).append(NL).append("```").append(NL).append(NL);
+        }
+        return sb.toString();
+    }
+
+    private String contract(InterfaceContract c) {
+        StringBuilder sb = new StringBuilder("Source **").append(c.source()).append("**: ").append(cell(c.summary())).append(NL).append(NL);
+        if (c.source() == InterfaceContract.Source.DERIVED_PROPOSAL) {
+            sb.append("> No code was generated, so this is a proposal derived from the design, not an exact contract.").append(NL).append(NL);
+        }
+        if (c.apiChanges().isEmpty()) {
+            sb.append("API changes: _none_.").append(NL).append(NL);
+        } else {
+            sb.append("| Method | Path | Change | Detail |").append(NL).append("|---|---|---|---|").append(NL);
+            c.apiChanges().forEach(a -> sb.append("| ").append(a.method() == null ? "-" : a.method()).append(" | `").append(cell(a.path()))
+                    .append("` | ").append(cell(a.change())).append(" | ").append(cell(a.detail())).append(" |").append(NL));
+            sb.append(NL);
+        }
+        if (c.schemaChanges().isEmpty()) {
+            sb.append("Schema changes: _none_.").append(NL).append(NL);
+        } else {
+            sb.append("| Table | Column | Change | Migration DDL |").append(NL).append("|---|---|---|---|").append(NL);
+            c.schemaChanges().forEach(s -> sb.append("| ").append(cell(s.table())).append(" | ").append(s.column() == null ? "-" : cell(s.column()))
+                    .append(" | ").append(cell(s.change())).append(" | ").append(s.ddl() == null ? "_not derived_" : "`" + cell(s.ddl()) + "`")
+                    .append(" |").append(NL));
+            sb.append(NL);
         }
         return sb.toString();
     }

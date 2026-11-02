@@ -18,7 +18,7 @@ class ChangeControlPolicyTest {
         for (int i = 0; i < pathsAndContent.length; i += 2) {
             files.add(new PatchProposal.FileChange(pathsAndContent[i], pathsAndContent[i + 1], "r"));
         }
-        return new PatchProposal("s", files);
+        return new PatchProposal("s", files, List.of(), List.of());
     }
 
     @Test
@@ -65,7 +65,7 @@ class ChangeControlPolicyTest {
         }
         assertThat(policy.evaluate(patch(many)).violations()).anyMatch(v -> v.contains("limit is 20"));
         assertThat(policy.evaluate(patch("docs/a.md", "x", "docs/a.md", "y")).violations()).anyMatch(v -> v.contains("more than once"));
-        assertThat(policy.evaluate(new PatchProposal("s", List.of())).violations()).containsExactly("Patch contains no files.");
+        assertThat(policy.evaluate(new PatchProposal("s", List.of(), List.of(), List.of())).violations()).containsExactly("Patch contains no files.");
         assertThat(policy.evaluate(null).passed()).isFalse();
     }
 

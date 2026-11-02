@@ -517,7 +517,7 @@ public class WorkflowEngine {
     private String fingerprint(WorkflowRun run, StageAgent agent, Map<String, ArtifactRef> inputs) {
         Map<String, String> hashes = new LinkedHashMap<>();
         inputs.forEach((name, ref) -> hashes.put(name, ref.contentHash()));
-        return Hashes.fingerprint(agent.key(), agent.version(), run.getExecutionMode().name(),
+        return Hashes.fingerprint(agent.key(), agent.version(), run.getExecutionMode().name() + "/" + run.getTestExecution(),
                 agent.readsRequirement() ? run.getRequirementHash() : "not-read", hashes);
     }
 
@@ -894,7 +894,7 @@ public class WorkflowEngine {
         AgentRequest.Limits limits = new AgentRequest.Limits(properties.limits().taskTimeout(),
                 properties.limits().maxTokensPerRun(), properties.limits().maxCostUsdPerRun(), properties.limits().maxOutputTokensPerCall());
         return new AgentRequest(run.getId(), key, attempt, agentId(agent), run.getTitle(),
-                agent.readsRequirement() ? run.getRequirementText() : null, run.getExecutionMode(), false,
+                agent.readsRequirement() ? run.getRequirementText() : null, run.getExecutionMode(), run.getTestExecution(), false,
                 agent.intent(), constraints, criteria,
                 new AgentRequest.RepositoryContext(run.getBaseCommit(), workspace, registry.all().size()),
                 agent.toolPolicy(), limits, inputs,

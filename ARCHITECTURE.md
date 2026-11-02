@@ -411,3 +411,64 @@ AgenticController ──► SdlcRunService ──► SdlcOrchestrator
 - **Cost bound.** Requirement length is capped at 10,000 characters and `max-tokens` is configurable.
   There's no per-operator budget or rate limit, because the admin identity is not rate-limited (an existing,
   documented property of that identity).
+
+## 9. SDLC Workflow Orchestrator
+
+§8's layer is a single-pass preview: one request, six planning artifacts, one human decision, no side
+effects. The orchestrator (`com.schwab.urlshortener.workflow`, `/api/v1/workflows/**`) is the full system. It
+carries a requirement through an explicit dependency graph to a reviewed, tested patch on a local branch. It
+reuses §8's planning agents as the generative step inside its stages, so the two never drift into different
+artifact shapes, and nothing in §8 or the URL shortener depends on it. Deeper references:
+`docs/architecture.md` (packages, data model, threads), `docs/orchestration.md` (graph, engine, API),
+`docs/governance.md` (approvals, policies, rollback), and `docs/limitations-and-tradeoffs.md`.
+
+### 9.1 The graph and what each stage produces
+
+```
+requirements ──► design ──► implementation ──┬──► tests ────┐
+ requirement-spec  architecture-design         │   test-plan   │
+                                               │   test-report ├──► release (human approval)
+ implementation-plan, change-patch,            ├──► security ──┤      readiness-report
+ interface-contract                            │   risk-assessment, policy-report
+                                               └──► docs ──────┘
+                                                   documentation
+```
+
+The graph is data (`WorkflowDefinition`), snapshotted per run and validated by `GraphValidator` (11 error
+codes: cycles, unknown agents, inputs not produced upstream, and so on). The engine runs scheduling rounds:
+skip, promote READY, dispatch up to `max-parallelism`, wait. Tests, security, and docs run concurrently, and
+release waits for all three. Each task passes an **entry gate** before it starts and an **exit gate** before
+its output is accepted. Gates are explicit, named criteria (e.g. IMP-EXIT-7: "the interface contract declares
+the patch's API and schema changes").
+
+### 9.2 From requirement to real code, in either mode
+
+| Step | LLM mode | DETERMINISTIC_DEMO mode |
+|---|---|---|
+| Normalize, design, plan, test plan | Claude via structured outputs (record = schema) | §8's rule-based agents |
+| Patch | Model returns a `PatchProposal`: whole files plus declared API/schema changes, no commands | A **code recipe** if one matches the requirement (`click-limit`, `expired-reactivation`): anchored edits to the worktree's real source, plus an integration test and an exact contract. Otherwise a change-record document |
+| Interface contract | `MODEL` (declared with the patch; review it against the diff) | `RECIPE` (exact), or `DERIVED_PROPOSAL` (from the design, when no code was generated) |
+| Change control | `ChangeControlPolicy`: path allowlist, protected paths need approval, file/byte caps | same |
+| Apply | Worktree of a private sandbox clone, reset to the base commit first | same |
+| Validate | Configured argv-only commands (`git diff --cached --check`) | same |
+| Test | Per run: `PLAN_VERIFICATION` (no product tests), or `COMMAND`: real `mvn -o test` on the plan's classes plus the patch's own tests, in the worktree | same |
+| Release | Readiness checklist (RR-1..9), then a human approval bound to the exact readiness version | same |
+| Promote | Explicit human action: the approved diff is committed to a **local** branch in the sandbox. Never pushed or merged | same |
+
+The patch artifact always says what it is: `kind` (CODE/DOCUMENT), `author` (`model`, `recipe:<id>`, or
+`change-record`), and a notice line. A recipe is a pre-authored, rule-based change. It is labeled
+DETERMINISTIC_DEMO everywhere and is never described as AI-generated. It exists so the full path (real code,
+real worktree, real Maven test run, review, promotion) is demonstrable with no credentials.
+
+### 9.3 Design decisions
+
+| Decision | Rationale |
+|---|---|
+| Recipes apply **anchored** edits to the real tree and refuse on any mismatch, rather than shipping pre-baked files | A pre-baked file would silently overwrite whatever the tree holds now. An anchor that isn't found exactly once means the code moved, and the honest result is "this recipe doesn't apply" (fall back to a change record), not a half-edited file |
+| Existing test call sites of changed record constructors are updated by a codemod, not by hand-listed edits | Adding a record component breaks every `new X(...)`. A lexer-aware codemod over `src/test/java` (it skips strings, text blocks, and comments) keeps the recipe correct as tests are added. It updated 40 call sites for `click-limit` |
+| Click-limit enforcement is inside the atomic `UPDATE ... WHERE clickCount < maxClicks` | Same posture as the existing click counter: no read-then-write race lets two concurrent final clicks both through. 0 rows updated on a limited link means the limit was reached |
+| The worktree is reset to base before a patch is authored | Found by running it: on re-planning, the previous attempt's patch was still applied, so the recipe's anchors were gone (and an LLM would have been shown last attempt's code as "current"). Every attempt now authors against the base commit |
+| Diffs are captured in full, with a hard cap that fails loudly | Found by running it: diffs went through the 4,000-character process-output tail, so every non-trivial patch was stored truncated and couldn't be re-applied by later stages. The change-record demo patches were small enough to hide this |
+| Test execution is a per-run choice, recorded on the run and in the fingerprint | A run that executed real tests and one that only verified a plan produce different evidence, so a report from one must never be reused for the other |
+| `COMMAND` runs targeted classes offline, not the full `verify` | It proves the patch and its own tests in minutes, without network access. The readiness report and run summary say the full suite and coverage gate still need to run on the promoted branch |
+| The interface contract is its own versioned artifact with a gate | API and schema changes are what reviewers most need to see and what diffs bury. IMP-EXIT-7 fails a CODE patch that edits an entity without declaring a schema change (with DDL), or edits a DTO or controller without an API change |

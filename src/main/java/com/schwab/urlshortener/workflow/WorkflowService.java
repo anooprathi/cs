@@ -20,6 +20,7 @@ import com.schwab.urlshortener.workflow.engine.Hashes;
 import com.schwab.urlshortener.workflow.engine.RunStatus;
 import com.schwab.urlshortener.workflow.engine.StageAgent;
 import com.schwab.urlshortener.workflow.engine.TaskState;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import com.schwab.urlshortener.workflow.engine.WorkflowEngine;
 import com.schwab.urlshortener.workflow.engine.WorkflowStore;
 import com.schwab.urlshortener.workflow.graph.GraphValidationResult;
@@ -140,7 +141,9 @@ public class WorkflowService {
     }
 
     private String agentsTestRunner() {
-        return properties.testRunner().mode() + (properties.testRunner().command().isEmpty() ? "" : " " + properties.testRunner().command());
+        return "default " + properties.testRunner().mode() + (properties.testRunner().command().isEmpty()
+                ? "; COMMAND unavailable (app.workflow.test-runner.command not set)"
+                : "; COMMAND runs " + properties.testRunner().command());
     }
 
     private WorkflowViews.Agent agentView(StageAgent a) {
@@ -171,6 +174,10 @@ public class WorkflowService {
         if (!faults.isEmpty() && mode != ExecutionMode.DETERMINISTIC_DEMO) {
             throw new IllegalArgumentException("demoFaults are only accepted for DETERMINISTIC_DEMO runs.");
         }
+        TestExecution testExecution = request.testExecution() == null ? properties.testRunner().defaultExecution() : request.testExecution();
+        if (testExecution == TestExecution.COMMAND && properties.testRunner().command().isEmpty()) {
+            throw new IllegalArgumentException("testExecution COMMAND needs app.workflow.test-runner.command to be configured.");
+        }
         WorkflowDefinition definition = request.definition() == null ? WorkflowDefinition.standard() : request.definition();
         GraphValidationResult validation = validator.validate(definition, agents);
         if (!validation.valid()) {
@@ -199,6 +206,7 @@ public class WorkflowService {
                 .requirementRevision(1)
                 .executionMode(mode)
                 .model(mode == ExecutionMode.LLM ? adapters.llmModel() : null)
+                .testExecution(testExecution)
                 .status(RunStatus.CREATED)
                 .definitionName(definition.name())
                 .definitionVersion(definition.version())
@@ -209,6 +217,7 @@ public class WorkflowService {
         details.put("requirementHash", run.getRequirementHash());
         details.put("requirementLength", requirement.length());
         details.put("definition", definition.name() + " v" + definition.version());
+        details.put("testExecution", testExecution);
         details.put("parallelLayers", validation.parallelLayers());
         if (!faults.isEmpty()) {
             details.put("injectedDemoFaults", faults);
@@ -507,6 +516,7 @@ public class WorkflowService {
         List<List<String>> layers = validator.validate(definition, agents).parallelLayers();
         return new WorkflowViews.Run(run.getId(), run.getTitle(), run.getExecutionMode(),
                 run.getExecutionMode() == ExecutionMode.LLM ? WorkflowViews.LLM_NOTICE : WorkflowViews.DEMO_NOTICE, run.getModel(),
+                run.getTestExecution(),
                 run.getStatus(), run.getRequirementRevision(), Hashes.shortHash(run.getRequirementHash()), run.getDefinitionName(), layers,
                 faults(run), run.getBaseCommit(), run.getWorkspacePath(), promotion, run.getFailureReason(), run.getDriveCount(),
                 run.getCreatedAt(), run.getStartedAt(), run.getCompletedAt(), tasks, approvals(runId));

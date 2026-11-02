@@ -92,6 +92,23 @@ class WorkspaceManagerTest {
         assertThat(Files.readString(ws.directory().resolve("docs/y.md"))).isEqualTo("y\n");
     }
 
+    /** Regression: diffs were captured through the 4,000-char output tail, so any real code patch re-applied as garbage. */
+    @Test
+    void reapply_worksForADiffFarLargerThanTheCommandOutputTail() throws Exception {
+        WorkspaceManager.Workspace ws = manager.open(6L, null);
+        String big = "line of generated content that makes this diff long\n".repeat(2_000);
+        String diff = manager.apply(ws, List.of(new PatchProposal.FileChange("docs/big.md", big, "r"),
+                new PatchProposal.FileChange("docs/after.md", "after\n", "r"))).unifiedDiff();
+        assertThat(diff.length()).isGreaterThan(ProcessRunner.OUTPUT_TAIL * 10);
+        assertThat(diff).contains("+++ b/docs/big.md", "+++ b/docs/after.md");
+        manager.reset(ws);
+
+        manager.reapply(ws, diff);
+
+        assertThat(Files.readString(ws.directory().resolve("docs/big.md"))).isEqualTo(big);
+        assertThat(Files.readString(ws.directory().resolve("docs/after.md"))).isEqualTo("after\n");
+    }
+
     @Test
     void reopen_reusesTheSameWorktreeAndBase() {
         WorkspaceManager.Workspace first = manager.open(4L, null);

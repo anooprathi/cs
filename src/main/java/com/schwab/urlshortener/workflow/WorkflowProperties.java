@@ -61,10 +61,13 @@ public record WorkflowProperties(
     }
 
     /**
-     * {@code mode=plan-verification} (default) checks the generated test plan
-     * against the repository and does not run product tests. {@code mode=command}
-     * runs {@code command} (no shell) in the run's isolated workspace. {@code {tests}}
-     * becomes the plan's existing JUnit class names.
+     * {@code mode} is the default {@link com.schwab.urlshortener.workflow.engine.TestExecution}
+     * for runs that don't choose one: {@code plan-verification} checks the generated test
+     * plan against the repository and runs no product tests; {@code command} runs
+     * {@code command} (argv, no shell) in the run's isolated workspace, where
+     * {@code {tests}} becomes the plan's existing JUnit class names plus every test
+     * class the patch adds or changes. A run may pick COMMAND explicitly whenever
+     * {@code command} is configured.
      */
     public record TestRunner(String mode, List<String> command, Duration timeout) {
 
@@ -79,6 +82,15 @@ public record WorkflowProperties(
             if (timeout == null) {
                 timeout = Duration.ofMinutes(10);
             }
+            if (!mode.equals(PLAN_VERIFICATION) && !mode.equals(COMMAND)) {
+                throw new IllegalStateException("app.workflow.test-runner.mode must be '" + PLAN_VERIFICATION + "' or '" + COMMAND
+                        + "', was '" + mode + "'");
+            }
+        }
+
+        public com.schwab.urlshortener.workflow.engine.TestExecution defaultExecution() {
+            return mode.equals(COMMAND) ? com.schwab.urlshortener.workflow.engine.TestExecution.COMMAND
+                    : com.schwab.urlshortener.workflow.engine.TestExecution.PLAN_VERIFICATION;
         }
     }
 

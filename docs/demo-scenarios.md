@@ -53,7 +53,8 @@ only in demo mode.
 |---|---|
 | Normalize | 4 FR → 4 acceptance criteria, 0 ambiguities, so no clarification checkpoint |
 | Task graph | `[requirements] [design] [implementation] [tests, security, docs] [release]` |
-| Agent execution | design maps to real components, and implementation writes a change-record patch into an isolated worktree and runs `git diff --cached --check` |
+| Agent execution | design maps to real components. Implementation applies the deterministic `click-limit` **code recipe** to the worktree's real source: `maxClicks` on the entity and request DTO, an atomic limit inside the click-count `UPDATE`, 410 Gone when the limit is reached, `remainingClicks` on stats, a codemod over the existing test call sites, and a new `ClickLimitIntegrationTest`. It runs `git diff --cached --check` and declares the interface contract (3 API changes, `ALTER TABLE url_mapping ADD COLUMN max_clicks INTEGER NULL`) |
+| **Real tests** | the run uses `testExecution: COMMAND`, so `tests` runs `mvn -B -o test -Dtest=ClickLimitIntegrationTest,<plan classes>` in the patched worktree, and the evidence check requires the patch's own test class to pass |
 | **Parallel execution** | `tests`, `security`, `docs` run at the same time; `release` starts only after all three succeed |
 | **Recoverable failure** | an injected transient fault on `tests` is retried with backoff and recovers, and the MTTR is reported |
 | Human approval | release readiness waits; the reviewer approves `readiness-report@v1` (bound to its hash) |
@@ -71,6 +72,7 @@ only in demo mode.
 | Step | What happens |
 |---|---|
 | Impact analysis | names the existing modules (service, API, DTOs, persistence) and their existing tests |
+| Code change | the `expired-reactivation` recipe adds a 409 guard to `UrlShortenerServiceImpl.reactivate`, a new `ExpiredLinkReactivationException`, and `ExpiredLinkReactivationIntegrationTest` (expired → 409; extend then reactivate → 200; unexpired → 200). These run for real (`testExecution: COMMAND`). Contract: one new response status, no schema change |
 | **Rejected gate** | security's exit gate fails on **POL-SCOPE** (payment processing is out of scope), with no retry; `release` is SKIPPED, while `tests` and `docs` still succeed |
 | **Upstream-change re-planning** | the product owner removes the payment clause; resume invalidates the stages affected by the changed spec and re-runs them |
 | Human approval | release readiness is approved after re-planning |
@@ -86,6 +88,7 @@ only in demo mode.
 | **Rejected gate (human)** | the reviewer rejects the assumptions with a clarification; this is never retried automatically |
 | **Upstream-change re-planning** | the clarified requirement is applied; the spec is regenerated, and the old rejection goes **STALE** because it was bound to `requirement-spec@v1` |
 | Resolution | the remaining assumption is approved; the run executes, then release readiness is approved |
+| Patch | no recipe matches the clarified requirement, so demo mode writes a **change record** (`kind: DOCUMENT`), and readiness check RR-9 reports that it isn't product code. Producing code for an arbitrary requirement needs LLM mode |
 
 ## What the four required demonstrations look like
 

@@ -161,3 +161,18 @@ issues found while running it) and the verification numbers. In brief:
 | T11 | Done. One deviation: the Postman collection was not extended (curl walkthrough in README §12.2 instead) |
 | T12 | Done: `mvn clean verify` 322 tests, 0 failures, 1 skipped (opt-in live test); 96.1% line coverage; manual curl run against a live dev instance |
 | Risk "LLM mode claimed without live validation" | Handled by **not claiming it**: the live smoke test exists but was not run, and README §12.4 says so |
+
+## 9. Follow-on: the SDLC workflow orchestrator
+
+This plan covers the single-pass agentic layer (`/api/v1/agentic`, README §12). Two follow-up briefs extended
+it into the full orchestrator (`workflow/`, `/api/v1/workflows`, README §13). That module's requirement →
+implementation mapping, including validation evidence for every requirement, is `SUBMISSION_NOTES.md`. Its
+design is `ARCHITECTURE.md` §9 and `docs/architecture.md`, and its execution log is `ENGINEERING_SUMMARY.md` §18.
+
+The orchestrator reuses this plan's T3-T7 agents unchanged, as the generative step inside its stage agents.
+Two of this plan's stated limitations no longer hold for the orchestrator:
+- §12.5 "Artifacts are proposals only": the orchestrator applies patches in isolated git worktrees, runs
+  validation and test commands there, and promotes approved patches to a local branch.
+- §12.5 "Synchronous runs": orchestrator runs are asynchronous with polling.
+
+Both still hold for `/api/v1/agentic`, which is kept as the lightweight preview.

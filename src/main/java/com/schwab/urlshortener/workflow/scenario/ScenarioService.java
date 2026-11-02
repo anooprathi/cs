@@ -3,12 +3,17 @@ package com.schwab.urlshortener.workflow.scenario;
 import com.schwab.urlshortener.agentic.model.ExecutionMode;
 import com.schwab.urlshortener.agentic.model.ImpactAnalysis;
 import com.schwab.urlshortener.agentic.model.RequirementSpec;
+import com.schwab.urlshortener.workflow.WorkflowProperties;
 import com.schwab.urlshortener.workflow.WorkflowReports;
 import com.schwab.urlshortener.workflow.WorkflowService;
 import com.schwab.urlshortener.workflow.api.WorkflowRequests;
 import com.schwab.urlshortener.workflow.api.WorkflowViews;
+import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
+import com.schwab.urlshortener.workflow.artifact.TestReport;
 import com.schwab.urlshortener.workflow.engine.RunStatus;
 import com.schwab.urlshortener.workflow.engine.TaskState;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
+import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import com.schwab.urlshortener.workflow.engine.WorkflowEngine;
 import com.schwab.urlshortener.workflow.engine.WorkflowStore;
 import com.schwab.urlshortener.workflow.metrics.WorkflowMetricsService;
@@ -75,14 +80,16 @@ public class ScenarioService {
     private final WorkflowStore store;
     private final WorkflowEngine engine;
     private final WorkflowMetricsService metrics;
+    private final WorkflowProperties properties;
 
     public ScenarioService(WorkflowService service, WorkflowReports reports, WorkflowStore store, WorkflowEngine engine,
-                           WorkflowMetricsService metrics) {
+                           WorkflowMetricsService metrics, WorkflowProperties properties) {
         this.service = service;
         this.reports = reports;
         this.store = store;
         this.engine = engine;
         this.metrics = metrics;
+        this.properties = properties;
     }
 
     public Report run(String name, ExecutionMode mode) {
@@ -106,7 +113,7 @@ public class ScenarioService {
         List<Step> steps = new ArrayList<>();
         boolean demo = mode == ExecutionMode.DETERMINISTIC_DEMO;
         WorkflowViews.Run run = service.create(new WorkflowRequests.CreateRun("Greenfield: click-limited short links", GREENFIELD_REQUIREMENT,
-                mode, null, demo ? Map.of("tests", 1) : null));
+                mode, null, demo ? Map.of("tests", 1) : null, codeTestExecution()));
         Long id = run.id();
         steps.add(new Step("Submit a clear requirement (4 statements)" + (demo ? " with one injected transient fault on 'tests'" : ""),
                 "Run " + id + " CREATED with " + run.tasks().size() + " tasks; parallel layers " + run.parallelLayers()));
@@ -153,6 +160,8 @@ public class ScenarioService {
                     countEvents(id, Type.WORKSPACE_PATCH_APPLIED) >= 1 && !validations.isEmpty()
                             && validations.stream().allMatch(e -> e.getMessage().contains("passed")),
                     validations.stream().map(WorkflowEvent::getMessage).collect(Collectors.joining("; "))));
+            checks.add(realCodeCheck(id));
+            checks.add(contractCheck(id, true));
         }
         checks.add(check("Formatting-only requirement change preserved unaffected work",
                 reusedAfter >= 3 && run.status() == RunStatus.SUCCEEDED,
@@ -176,7 +185,7 @@ public class ScenarioService {
     private Report brownfield(ExecutionMode mode) {
         List<Step> steps = new ArrayList<>();
         WorkflowViews.Run run = service.create(new WorkflowRequests.CreateRun("Brownfield: refuse reactivation of expired links",
-                BROWNFIELD_REQUIREMENT, mode, null, null));
+                BROWNFIELD_REQUIREMENT, mode, null, null, codeTestExecution()));
         Long id = run.id();
         steps.add(new Step("Submit a change to existing behavior (reactivation of expired links)", "Run " + id + " CREATED"));
         service.start(id);
@@ -217,6 +226,10 @@ public class ScenarioService {
         checks.add(check("Release needed a fresh human approval after re-planning", approvedCount(id) >= 1, approvalsLine(id)));
         checks.add(check("Parallel execution observed", WorkflowMetricsService.maxConcurrentRunning(events) >= 2,
                 "max running at once " + WorkflowMetricsService.maxConcurrentRunning(events)));
+        if (run.workspace() != null) {
+            checks.add(realCodeCheck(id));
+            checks.add(contractCheck(id, false));
+        }
         checks.add(audit(id));
         return finish("brownfield", "Enhance existing URL-shortener behavior (refuse reactivation of expired links) after analyzing the impacted "
                 + "modules, then show a rejected gate (an out-of-scope payment clause) and upstream-change re-planning.", id, mode, steps, checks);
@@ -233,7 +246,7 @@ public class ScenarioService {
     private Report ambiguous(ExecutionMode mode) {
         List<Step> steps = new ArrayList<>();
         WorkflowViews.Run run = service.create(new WorkflowRequests.CreateRun("Ambiguous: safer links, more useful analytics",
-                AMBIGUOUS_REQUIREMENT, mode, null, null));
+                AMBIGUOUS_REQUIREMENT, mode, null, null, null));
         Long id = run.id();
         steps.add(new Step("Submit \"" + AMBIGUOUS_REQUIREMENT + "\"", "Run " + id + " CREATED"));
         service.start(id);
@@ -283,6 +296,43 @@ public class ScenarioService {
 
     // ------------------------------------------------------------------ helpers
 
+    /**
+     * Greenfield and brownfield produce real code (a demo recipe, or the model), so their tests really run when a
+     * test command is configured. The ambiguous scenario keeps the configured default: its clarified requirement
+     * matches no recipe, so its patch is a change record and there's no product test to run.
+     */
+    private TestExecution codeTestExecution() {
+        return properties.testRunner().command().isEmpty() ? null : TestExecution.COMMAND;
+    }
+
+    /** The patch is real product code with its own tests, and those tests passed in a real test command in the worktree. */
+    private Check realCodeCheck(Long id) {
+        ChangePatch patch = latest(id, "change-patch", ChangePatch.class).orElse(null);
+        TestReport report = latest(id, "test-report", TestReport.class).orElse(null);
+        if (patch == null || report == null) {
+            return check("Real code change: CODE patch with tests, executed by the real test command", false, "no change-patch/test-report");
+        }
+        List<String> patchClasses = patch.testFiles().stream()
+                .map(p -> p.substring(p.lastIndexOf('/') + 1).replace(".java", "")).toList();
+        boolean patchTestsRan = !patchClasses.isEmpty() && patchClasses.stream()
+                .allMatch(c -> report.results().stream().anyMatch(r -> r.testCaseId().equals("patch:" + c) && r.status() == TestReport.Status.PASSED));
+        return check("Real code change: CODE patch with tests, executed by the real test command",
+                patch.kind() == ChangePatch.Kind.CODE && report.productTestsExecuted() && report.allExecutedPassed() && patchTestsRan,
+                patch.kind() + " patch by " + patch.author() + " (" + patch.diffStat() + "); runner " + report.runner()
+                        + ", exit " + report.exitCode() + ", " + report.passed() + "/" + report.executed() + " passed; patch tests " + patchClasses
+                        + "; command: " + report.command());
+    }
+
+    private Check contractCheck(Long id, boolean expectSchemaChange) {
+        InterfaceContract c = latest(id, "interface-contract", InterfaceContract.class).orElse(null);
+        boolean ok = c != null && c.source() != InterfaceContract.Source.DERIVED_PROPOSAL && !c.apiChanges().isEmpty()
+                && (!expectSchemaChange || c.schemaChanges().stream().anyMatch(s -> s.ddl() != null && !s.ddl().isBlank()));
+        return check("Interface contract declares the API" + (expectSchemaChange ? " and schema (with DDL)" : "") + " changes", ok,
+                c == null ? "no interface-contract" : c.source() + ": "
+                        + c.apiChanges().stream().map(a -> a.method() + " " + a.path() + " " + a.change()).toList()
+                        + "; schema " + c.schemaChanges().stream().map(InterfaceContract.SchemaChange::ddl).toList());
+    }
+
     /** Approves every checkpoint the run reaches, one at a time, until it stops waiting (bounded). */
     private WorkflowViews.Run approveAll(Long id, List<Step> steps, String what) {
         WorkflowViews.Run run = service.view(id);
@@ -310,7 +360,8 @@ public class ScenarioService {
     }
 
     private WorkflowViews.Run await(Long id) {
-        long deadline = System.currentTimeMillis() + 180_000;
+        // Generous: with COMMAND test execution a drive includes a real Maven build and test run in the worktree.
+        long deadline = System.currentTimeMillis() + 900_000;
         while (System.currentTimeMillis() < deadline) {
             WorkflowViews.Run run = service.view(id);
             if (!engine.isActive(id) && run.status() != RunStatus.RUNNING) {
@@ -323,7 +374,7 @@ public class ScenarioService {
                 break;
             }
         }
-        throw new IllegalStateException("Scenario run " + id + " did not settle within 180 s");
+        throw new IllegalStateException("Scenario run " + id + " did not settle within 900 s");
     }
 
     private Report finish(String name, String description, Long id, ExecutionMode mode, List<Step> steps, List<Check> checks) {

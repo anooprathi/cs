@@ -13,6 +13,15 @@ The workflow module reuses the agentic layer's agents as the generative step ins
 agents, rather than duplicating them. It adds no coupling in the other direction: nothing in `agentic` or
 the URL shortener depends on `workflow`.
 
+**Which one to use.** `/api/v1/agentic` is the lightweight, synchronous, single-pass **preview**: one request
+produces six reviewable planning artifacts plus a quality-gate verdict, and a human records one decision.
+`/api/v1/workflows` is the **full SDLC system** that the assignment asks for: the same planning agents run as
+graph stages with gates, persistence, resume, approvals, retries, workspaces, real patches, test execution,
+audit, and metrics. Both are kept on purpose. The preview answers "what would this change involve?" in
+milliseconds with no side effects, and the orchestrator is what actually carries a change through the SDLC.
+Retiring the preview would delete a working, tested capability without simplifying the orchestrator, which
+doesn't depend on its API.
+
 ## Workflow module: packages
 
 ```
@@ -22,7 +31,9 @@ workflow/
 │                 AgentRequest/AgentResult, GateCriterion, TaskState,
 │                 ToolPolicy, AgentFailures, Hashes, WorkflowArtifactRenderer
 ├── agents/       7 stage agents + AgentStageRunner, PolicyEngine,       the work behind each stage
-│                 TestRunner (plan-verification | command), DemoChangeRecord
+│                 TestRunner (plan-verification | command), DemoChangeRecord,
+│                 recipes/ (CodeRecipe, SourceEdits, ClickLimitRecipe,     deterministic demo code changes
+│                          ExpiredReactivationRecipe, CodeRecipes)
 ├── adapter/      ExecutionAdapter, DeterministicDemoAdapter,            demo vs real-LLM execution, budget
 │                 LlmExecutionAdapter, AdapterRouter, BudgetLedger
 ├── workspace/    WorkspaceManager (git worktrees), ChangeControlPolicy,  isolated code changes
@@ -57,7 +68,7 @@ workflow/
                 StageAgent (7) ──── AgentStageRunner ──── AdapterRouter                      │
                     │                                      ├─ DeterministicDemoAdapter       │
                     │                                      └─ LlmExecutionAdapter ── LlmClient (Anthropic SDK)
-                    ├─ PolicyEngine, TestRunner, DemoChangeRecord                            │
+                    ├─ PolicyEngine, TestRunner, CodeRecipes / DemoChangeRecord              │
                     └─ WorkspaceManager ── ProcessRunner ── git (sandbox clone + worktrees)  │
                                                                                              ▼
              WorkflowStore ── JPA ── H2: workflow_run, workflow_task, workflow_artifact,
@@ -69,7 +80,7 @@ workflow/
 
 | Table | One row per | Key fields | Mutability |
 |---|---|---|---|
-| `workflow_run` | run | requirement text + hash + revision, execution mode, model, status, definition JSON snapshot, stop/cancel flags, base commit, workspace path, promotion | updated (with `@Version`) |
+| `workflow_run` | run | requirement text + hash + revision, execution mode, model, test execution (PLAN_VERIFICATION/COMMAND), status, definition JSON snapshot, stop/cancel flags, base commit, workspace path, promotion | updated (with `@Version`) |
 | `workflow_task` | graph node in a run | state, attempts, retries, reused, fallbackUsed, reviewReason, input fingerprint, `outputRefsJson` (current accepted versions), entry/exit gate JSON | updated (with `@Version`); every state change is audited |
 | `workflow_artifact` | artifact version | name, version, content JSON + Markdown, content hash, input fingerprint, origin, adapter, model, fallback, agent result envelope, gates, accepted, invalidated, tokens/cost | immutable content; only `accepted` / `invalidated` / `gatesJson` flags change |
 | `workflow_lineage` | (output, input) edge | output artifact id → input artifact id, version, hash | insert-only |

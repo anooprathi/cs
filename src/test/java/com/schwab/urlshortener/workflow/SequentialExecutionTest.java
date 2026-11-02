@@ -37,7 +37,7 @@ class SequentialExecutionTest {
         });
 
         WorkflowViews.Run run = service.start(service.create(new WorkflowRequests.CreateRun("sequential", "Tenants must get a result.",
-                ExecutionMode.DETERMINISTIC_DEMO, FakeAgents.diamond(false), null)).id());
+                ExecutionMode.DETERMINISTIC_DEMO, FakeAgents.diamond(false), null, null)).id());
 
         assertThat(run.status()).isEqualTo(RunStatus.SUCCEEDED);
         assertThat(SCRIPT.maxConcurrent.get()).isEqualTo(1);

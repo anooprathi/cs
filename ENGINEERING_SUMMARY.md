@@ -790,3 +790,111 @@ has not been evaluated.
 | Manual run | `mvn spring-boot:run -Dspring-boot.run.profiles=dev`, then curl: capabilities 200 (demo only); no key 401; tenant key 403; `mode: LLM` 503; demo run 201 with 6 COMPLETED stages; artifact 200; `report.md` `text/markdown`; review 200; second review 409 |
 | Live Anthropic API | **Not exercised.** `AnthropicLiveSmokeTest` was skipped |
 | Postman collection | Not extended for the agentic endpoints in this pass, and not re-run. The existing collection's URL-shortener requests are unchanged |
+
+## 18. Addendum: SDLC Workflow Orchestrator
+
+### Requirement understanding
+Two follow-up briefs turned §17's single-pass pipeline into a full SDLC system:
+1. **Orchestration module.** An explicit dependency graph of the 7 stages, with:
+   - sequential and parallel execution with synchronization;
+   - entry/exit gates;
+   - persistent state with restart/resume;
+   - versioned artifact refs and decision lineage;
+   - nine explicit task states and graph validation;
+   - an API/CLI and tests.
+2. **Governance and execution.** On top of the module:
+   - stage-specific agent contracts with a real LLM adapter and a deterministic demo adapter;
+   - isolated git worktrees and tool/path/command/time/token limits;
+   - version-bound approvals that go stale when the artifact changes;
+   - bounded retries, a fallback, safe-stop/cancel, rollback/compensation, and re-planning;
+   - an append-only audit trail, precisely defined metrics, and a timeline;
+   - three runnable scenarios (greenfield, brownfield, ambiguous).
+
+A review of the assignment PDF against the result then found four gaps, which this pass closes:
+1. Demo mode produced no real code.
+2. `SUBMISSION.md` was stale.
+3. The per-run summary lacked plan, rationale, risks, and assumptions.
+4. The `/agentic` vs `/workflows` overlap was unexplained.
+
+Design: `ARCHITECTURE.md` §9 and `docs/architecture.md`. Usage: `README.md` §13 and `docs/orchestration.md`.
+
+### Codebase reasoning (impacted areas)
+- **New:** everything under `com.schwab.urlshortener.workflow` (graph, engine, agents, adapters, workspace,
+  audit, metrics, persistence, scenarios, API).
+- **Touched in the existing app:** one `SecurityConfig` matcher (`/api/v1/workflows/**` → `ROLE_ADMIN`) and
+  `app.workflow.*` properties.
+- **Reused, not reinvented:** §8's five planning agents (as the generative step inside four stage agents),
+  `ComponentCatalog`, `MarkdownRenderer`, `AnthropicLlmClient`, the operator identity, the `ApiException`
+  family, and `PageResponse`.
+- **What the demo recipes edit:** the URL-shortener product code, but **only inside per-run worktrees of a
+  sandbox clone**. The source repository is never written. That's verified by `WorkspaceManagerTest` and
+  by the clean `git status` after every scenario run.
+
+### AI-assisted execution: generated / edited / rejected
+- **Generated:** the engine, governance, workspace, audit, and metrics code, the stage agents, the scenarios,
+  and (this pass) the two deterministic code recipes with their integration tests, the codemod, per-run test
+  execution, the interface-contract artifact and its gate, and the extended run summary.
+- **Edited after running it** (each was found by executing the system, not by reading the code):
+  1. **Diffs were silently truncated.** `WorkspaceManager` captured `git diff` through `ProcessRunner`'s
+     4,000-character output tail. Change-record patches fit, so all three scenarios passed. The first real
+     code patch (a 38 KB diff across 13 files) was stored truncated, and the test stage's re-apply failed with `patch fragment
+     without header`. Fix: full capture with an 8 MB cap that fails loudly
+     (`ProcessRunner.Result.outputTruncated`). Regression test:
+     `WorkspaceManagerTest#reapply_worksForADiffFarLargerThanTheCommandOutputTail`.
+  2. **Re-planning authored patches against the previous patch.** After the brownfield amendment, the
+     implementation stage re-ran with the v1 patch still applied in the worktree. The recipe's anchor was
+     gone, so it fell back to a change record and two scenario checks failed. The same flaw would have
+     shown an LLM last attempt's code as "current". Fix: reset the worktree to the base commit before
+     authoring.
+  3. **Earlier passes (cf986ad, 21d51c3):**
+     - no renderer for `ChangePatch`, and the renderer threw on unknown types (it now falls back to JSON);
+     - worktree branch collisions after a restart, because H2 run ids restart at 1 (fixed with a per-boot
+       namespace);
+     - CRLF conversion on Windows broke patch re-apply (fixed with `core.autocrlf=false` in the sandbox);
+     - the brownfield run sat in WAITING_APPROVAL because "immediately" is in the vague-term lexicon
+       (fixed by rewording the requirement, plus `approveAll` in the scenarios);
+     - seven SpotBugs null-path and map-iteration findings in new code.
+- **Caught in the docs, not the code:**
+  - Docs claimed `VALIDATION_COMMAND` audit events that the engine didn't emit. Fixed by adding
+    `auditPatch`, plus a scenario check that reads those events.
+  - `SUBMISSION_NOTES` cited a README section that didn't exist and a secret scan that hadn't been run. The
+    scan was then run, and it found a test fixture derived from a real dev key, which was replaced.
+  - This pass: a hand-typed "41 call sites" in `ARCHITECTURE.md` §9 was checked against the recipe's own
+    report (40). A `grep` gave 42, because it also matched two string literals in the new `CodeRecipesTest`.
+    That mismatch exposed a **real bug**: once `CodeRecipesTest` was committed, the codemod would have
+    rewritten those string literals in every greenfield worktree and broken its test compile. The codemod
+    is now lexer-aware: it skips strings, text blocks, char literals, and comments, and handles nested
+    same-type calls (`CodeRecipesTest#codemod_handlesNestingStringsAndEmptyArgumentLists`, plus an
+    assertion that `CodeRecipesTest` itself is left untouched).
+- **Rejected:**
+  - **Calling the demo recipes AI, or "code generation".** They are pre-authored, rule-based changes for
+    exactly two requirements, labeled DETERMINISTIC_DEMO on the patch (`author: recipe:<id>`), in the run
+    summary, and in every doc. Any other requirement still gets a change record in demo mode.
+  - **Pre-baked replacement files for the recipes.** They would silently overwrite whatever the tree holds.
+    Anchored edits refuse instead (`RecipeNotApplicable`), and the agent falls back to a change record.
+  - **Hand-listed edits of the 40 test call sites** broken by the new record components. A lexer-aware
+    codemod (`SourceEdits.appendConstructorArgument`) stays correct as tests are added.
+  - **One global test-runner bean.** Test execution is a per-run choice, stored on the run and included in
+    the input fingerprint, so a plan-verified report is never reused as if tests had run.
+  - **Running `mvn verify` inside the test stage.** A partial build's coverage gate is meaningless, and a
+    full build takes too long. `COMMAND` runs the targeted classes offline, and the summary says the full
+    suite must still run on the promoted branch.
+  - **Retiring `/api/v1/agentic`.** It's a working, tested, side-effect-free preview, and the orchestrator
+    doesn't depend on its API. Documented as the lightweight single pass instead (`docs/architecture.md`).
+  - **Automatic retry of policy or gate failures, and any automatic merge, push, or deploy.**
+
+### Validation & risk control
+| What | Evidence |
+|---|---|
+| Demo code is real and its tests really run | `ScenarioEndToEndTest` (greenfield, brownfield) runs the real `mvn -B -o test -Dtest=…` in the worktree. The check "Real code change: CODE patch with tests, executed by the real test command" requires a CODE patch, `productTestsExecuted`, all executed cases passed, and a `patch:<Class>` PASSED row for every test class the patch adds or changes |
+| Recipes match the real tree, and refuse when they don't | `CodeRecipesTest`: both recipes applied to this repository, refusal on a missing file or ambiguous anchor, and codemod nesting/strings/empty-argument cases |
+| Contract declared and gated | `PolicyAndRunnersTest#contractGate_…`; scenario check "Interface contract declares the API and schema (with DDL) changes" |
+| Windows `mvn` → `mvn.cmd` resolution | `PolicyAndRunnersTest#processRunner_resolvesWindowsLaunchers` |
+| Engine behavior (ordering, parallel barrier, gates, resume, retries, fallback, approvals, stale approvals, cancellation, rollback, invalidation) | `WorkflowEngineTest`, `SequentialExecutionTest`, `WorkflowApiIntegrationTest` |
+
+An observed anomaly, reported rather than explained away: in one run, a single Mockito test case inside the
+nested Maven build took 1,079 s (the whole class normally takes 0.46 s). The re-run took about one minute, so
+this looks like a host-level pause rather than the code, but the cause wasn't established.
+
+### Verification
+See `SUBMISSION.md` §5 for this pass's `mvn clean verify` numbers and the scenario CLI results.

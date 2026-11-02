@@ -1,8 +1,14 @@
 package com.schwab.urlshortener.workflow;
 
 import com.schwab.urlshortener.agentic.model.ExecutionMode;
+import com.schwab.urlshortener.agentic.model.ImplementationPlan;
+import com.schwab.urlshortener.agentic.model.RequirementSpec;
+import com.schwab.urlshortener.agentic.model.RiskAssessment;
 import com.schwab.urlshortener.agentic.review.MarkdownRenderer;
 import com.schwab.urlshortener.workflow.api.WorkflowViews;
+import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
+import com.schwab.urlshortener.workflow.artifact.TestReport;
+import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import com.schwab.urlshortener.workflow.audit.AuditLog;
 import com.schwab.urlshortener.workflow.engine.Hashes;
 import com.schwab.urlshortener.workflow.engine.WorkflowStore;
@@ -138,6 +144,17 @@ public class WorkflowReports {
                 .append("| Promotion | ").append(run.promotion() == null ? "not promoted" : run.promotion().branch() + " @ "
                         + Hashes.shortHash(run.promotion().commit()) + (run.promotion().compensatedAt() == null ? "" : " (compensated)")).append(" |\n\n");
 
+        Map<String, WorkflowArtifact> current = new LinkedHashMap<>();
+        service.artifacts(runId).stream().filter(WorkflowViews.ArtifactSummary::current)
+                .forEach(a -> current.put(a.name(), store.artifact(a.id())));
+        ChangePatch patch = content(current, "change-patch", ChangePatch.class);
+        TestReport tests = content(current, "test-report", TestReport.class);
+        builtSection(sb, patch, tests, content(current, "interface-contract", InterfaceContract.class));
+        List<Map<String, Object>> results = latestAgentResults(events);
+        planSection(sb, content(current, "implementation-plan", ImplementationPlan.class), results);
+        risksSection(sb, content(current, "risk-assessment", RiskAssessment.class), results);
+        assumptionsSection(sb, content(current, "requirement-spec", RequirementSpec.class), results);
+
         sb.append("### Tasks\n\n| Task | Stage | State | Attempts | Retries | Reused | Fallback | Outputs |\n|---|---|---|---:|---:|---|---|---|\n");
         for (WorkflowViews.Task t : run.tasks()) {
             sb.append("| ").append(t.key()).append(" | ").append(t.stage()).append(" | ").append(t.state()).append(" | ").append(t.attempts())
@@ -168,13 +185,162 @@ public class WorkflowReports {
         sb.append("\n### What this run did NOT do\n\n")
                 .append("- It did not merge, push, or deploy anything. Promotion (if shown) is a local branch in the orchestrator's sandbox clone.\n");
         if (run.executionMode() == ExecutionMode.DETERMINISTIC_DEMO) {
-            sb.append("- No language model was called; the patch is a change-record document, not product code.\n");
+            sb.append(patch != null && patch.kind() == ChangePatch.Kind.CODE
+                    ? "- No language model was called. The code came from a pre-authored deterministic recipe (`" + patch.author()
+                    + "`); it is not AI-generated and only exists for requirements a recipe recognizes.\n"
+                    : "- No language model was called; the patch is a change-record document, not product code.\n");
         }
-        WorkflowArtifact testReport = store.artifacts(runId).stream().filter(a -> a.getName().equals("test-report")).reduce((a, b) -> b).orElse(null);
-        if (testReport != null && testReport.getContentJson().contains("\"productTestsExecuted\":false")) {
-            sb.append("- No product test suite was executed (test runner: plan-verification).\n");
+        if (tests != null && !tests.productTestsExecuted()) {
+            sb.append("- No product test suite was executed (test execution: plan verification).\n");
+        } else if (tests != null) {
+            sb.append("- Only the targeted test classes ran (`").append(cells.cell(tests.command()))
+                    .append("`), not the full suite with its coverage gate; run `mvn clean verify` on the promoted branch before merging.\n");
         }
         return sb.toString();
+    }
+
+    private <T> T content(Map<String, WorkflowArtifact> current, String name, Class<T> type) {
+        WorkflowArtifact a = current.get(name);
+        return a == null ? null : store.read(a.getContentJson(), type);
+    }
+
+    /** The details of the last AGENT_RESULT per task: what each agent decided, assumed, and flagged. */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> latestAgentResults(List<WorkflowEvent> events) {
+        Map<String, Map<String, Object>> byTask = new LinkedHashMap<>();
+        events.stream().filter(e -> e.getType() == Type.AGENT_RESULT && e.getDetailsJson() != null).forEach(e -> {
+            Map<String, Object> details = new LinkedHashMap<>(store.read(e.getDetailsJson(), Map.class));
+            details.put("task", e.getTaskKey());
+            byTask.put(e.getTaskKey(), details);
+        });
+        return List.copyOf(byTask.values());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> list(Map<String, Object> details, String key) {
+        Object v = details.get(key);
+        return v instanceof List<?> l ? (List<Object>) l : List.of();
+    }
+
+    private void builtSection(StringBuilder sb, ChangePatch patch, TestReport tests, InterfaceContract contract) {
+        sb.append("### What was built\n\n");
+        if (patch == null) {
+            sb.append("_No accepted change-patch._\n\n");
+            return;
+        }
+        sb.append("- **Patch:** ").append(patch.kind()).append(" by `").append(patch.author()).append("`, ")
+                .append(patch.applied() ? "applied in the isolated worktree (" + cells.cell(lastLine(patch.diffStat())) + ")" : "not applied")
+                .append(". ").append(cells.cell(patch.summary())).append('\n');
+        if (patch.notice() != null) {
+            sb.append("- **Provenance:** ").append(cells.cell(patch.notice())).append('\n');
+        }
+        if (!patch.testFiles().isEmpty()) {
+            sb.append("- **Tests in the patch:** ").append(patch.testFiles().stream().map(f -> "`" + f + "`").collect(Collectors.joining(", ")))
+                    .append('\n');
+        }
+        if (tests != null) {
+            sb.append("- **Test execution:** runner `").append(tests.runner()).append("`, product tests executed: **")
+                    .append(tests.productTestsExecuted() ? "yes" : "no").append("**, ").append(tests.passed()).append('/')
+                    .append(tests.executed()).append(" passed");
+            if (tests.command() != null) {
+                sb.append(", command `").append(cells.cell(tests.command())).append("` exit ").append(tests.exitCode());
+            }
+            sb.append(".\n");
+            junitTotals(tests.outputTail()).ifPresent(t -> sb.append("- **JUnit totals reported by the command:** `").append(cells.cell(t))
+                    .append("`\n"));
+        }
+        if (contract != null) {
+            sb.append("- **Interface contract (").append(contract.source()).append("):** ");
+            List<String> items = new java.util.ArrayList<>();
+            contract.apiChanges().forEach(a -> items.add((a.method() == null ? "" : a.method() + " ") + "`" + cells.cell(a.path()) + "` "
+                    + a.change()));
+            contract.schemaChanges().forEach(s -> items.add(s.ddl() == null ? "schema: " + cells.cell(s.table()) + " " + s.change()
+                    : "`" + cells.cell(s.ddl()) + "`"));
+            sb.append(items.isEmpty() ? "no API or schema change" : String.join("; ", items)).append('\n');
+        }
+        sb.append('\n');
+    }
+
+    private static String lastLine(String text) {
+        if (text == null || text.isBlank()) {
+            return "-";
+        }
+        List<String> lines = text.strip().lines().toList();
+        return lines.get(lines.size() - 1).strip();
+    }
+
+    /** The last Maven Surefire "Tests run: n, Failures: n, ..." totals line in the command output, if any. */
+    static java.util.Optional<String> junitTotals(String output) {
+        if (output == null) {
+            return java.util.Optional.empty();
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Tests run: \\d+, Failures: \\d+, Errors: \\d+, Skipped: \\d+(?=\\s*$)",
+                java.util.regex.Pattern.MULTILINE).matcher(output);
+        String last = null;
+        while (m.find()) {
+            last = m.group();
+        }
+        return java.util.Optional.ofNullable(last);
+    }
+
+    private void planSection(StringBuilder sb, ImplementationPlan plan, List<Map<String, Object>> results) {
+        sb.append("### Plan and rationale\n\n");
+        if (plan == null || plan.tasks() == null || plan.tasks().isEmpty()) {
+            sb.append("_No accepted implementation plan._\n\n");
+        } else {
+            sb.append("| Task | Title | Depends on | Components | Criteria |\n|---|---|---|---|---|\n");
+            plan.tasks().forEach(t -> sb.append("| ").append(t.id()).append(" | ").append(cells.cell(t.title())).append(" | ")
+                    .append(t.dependsOn() == null ? "" : String.join(", ", t.dependsOn())).append(" | ")
+                    .append(t.components() == null ? "" : cells.cell(String.join(", ", t.components()))).append(" | ")
+                    .append(t.acceptanceCriteria() == null ? "" : String.join(", ", t.acceptanceCriteria())).append(" |\n"));
+            sb.append('\n');
+        }
+        sb.append("Key decisions (as recorded by each stage's agent):\n\n");
+        boolean any = false;
+        for (Map<String, Object> r : results) {
+            for (Object d : list(r, "decisions")) {
+                if (d instanceof Map<?, ?> m) {
+                    sb.append("- `").append(r.get("task")).append("`: ").append(cells.cell(String.valueOf(m.get("decision"))))
+                            .append(" _Why:_ ").append(cells.cell(String.valueOf(m.get("rationale")))).append('\n');
+                    any = true;
+                }
+            }
+        }
+        sb.append(any ? "\n" : "_None recorded._\n\n");
+    }
+
+    private void risksSection(StringBuilder sb, RiskAssessment risks, List<Map<String, Object>> results) {
+        sb.append("### Risks and trade-offs\n\n");
+        if (risks != null && risks.risks() != null && !risks.risks().isEmpty()) {
+            sb.append("| Risk | Severity | Description | Mitigation |\n|---|---|---|---|\n");
+            risks.risks().forEach(r -> sb.append("| ").append(r.id()).append(" | ").append(r.severity()).append(" | ")
+                    .append(cells.cell(r.description())).append(" | ").append(cells.cell(r.mitigation())).append(" |\n"));
+            sb.append('\n');
+        } else {
+            sb.append("_No accepted risk assessment._\n\n");
+        }
+        List<String> flagged = new java.util.ArrayList<>();
+        results.forEach(r -> list(r, "risks").forEach(x -> flagged.add("- `" + r.get("task") + "`: " + cells.cell(String.valueOf(x)))));
+        if (!flagged.isEmpty()) {
+            sb.append("Flagged by agents during execution:\n\n").append(String.join("\n", flagged)).append("\n\n");
+        }
+    }
+
+    private void assumptionsSection(StringBuilder sb, RequirementSpec spec, List<Map<String, Object>> results) {
+        sb.append("### Assumptions\n\n");
+        if (spec != null && spec.ambiguities() != null && !spec.ambiguities().isEmpty()) {
+            sb.append("Approved by a reviewer, NOT confirmed by the requirement owner:\n\n| Id | Ambiguity | Assumption taken |\n|---|---|---|\n");
+            spec.ambiguities().forEach(a -> sb.append("| ").append(a.id()).append(" | ").append(cells.cell(a.statement())).append(" | ")
+                    .append(cells.cell(a.assumption())).append(" |\n"));
+            sb.append('\n');
+        } else {
+            sb.append("No requirement ambiguities remained in the accepted requirement-spec.\n\n");
+        }
+        List<String> stated = new java.util.ArrayList<>();
+        results.forEach(r -> list(r, "assumptions").forEach(x -> stated.add("- `" + r.get("task") + "`: " + cells.cell(String.valueOf(x)))));
+        if (!stated.isEmpty()) {
+            sb.append("Stated by agents:\n\n").append(String.join("\n", stated)).append("\n\n");
+        }
     }
 
     /** Run report: banner, summary, then every current artifact's rendered Markdown. */

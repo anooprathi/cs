@@ -1,5 +1,6 @@
 package com.schwab.urlshortener.workflow.api;
 
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.schwab.urlshortener.agentic.model.ExecutionMode;
 import com.schwab.urlshortener.workflow.engine.ArtifactOrigin;
@@ -29,6 +30,7 @@ public final class WorkflowViews {
             ExecutionMode executionMode,
             String executionNotice,
             String model,
+            TestExecution testExecution,
             RunStatus status,
             int requirementRevision,
             String requirementHash,

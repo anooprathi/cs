@@ -145,8 +145,8 @@ public class ReleaseReadinessAgent implements StageAgent {
                 Checks.safe(spec.ambiguities()).size() + " assumption(s) were approved, not confirmed by the requirement owner"));
         checks.add(new ReadinessReport.Check("RR-8", "No policy warnings", false, policy.warnings() == 0, policy.warnings() + " warning(s)"));
         checks.add(new ReadinessReport.Check("RR-9", "The patch is product code (not a demo change record)", false,
-                patch.notice() == null || !patch.notice().startsWith("DETERMINISTIC_DEMO"),
-                patch.notice() == null ? "-" : patch.notice()));
+                patch.kind() == ChangePatch.Kind.CODE,
+                patch.kind() + " patch by " + patch.author() + (patch.notice() == null ? "" : ": " + patch.notice())));
 
         List<String> subject = new ArrayList<>();
         for (String name : List.of(Artifacts.CHANGE_PATCH, Artifacts.TEST_REPORT, Artifacts.POLICY_REPORT)) {

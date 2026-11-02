@@ -7,6 +7,7 @@ import com.schwab.urlshortener.agentic.model.ExecutionMode;
 import com.schwab.urlshortener.workflow.WorkflowProperties;
 import com.schwab.urlshortener.workflow.engine.AgentFailures;
 import com.schwab.urlshortener.workflow.engine.AgentRequest;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import com.schwab.urlshortener.workflow.engine.ArtifactOrigin;
 import com.schwab.urlshortener.workflow.engine.ToolPolicy;
 import com.schwab.urlshortener.workflow.persistence.WorkflowArtifactRepository;
@@ -38,7 +39,7 @@ class ExecutionAdaptersTest {
     private static final GenerationRequest<Out> GEN = new GenerationRequest<>("test step", Out.class, "sys", "user", () -> new Out("demo"));
 
     private static AgentRequest request(ExecutionMode mode, boolean fallback, ToolPolicy tools) {
-        AgentRequest r = new AgentRequest(1L, "t", 1, "a@1", "title", null, mode, false, "intent", List.of(), List.of(),
+        AgentRequest r = new AgentRequest(1L, "t", 1, "a@1", "title", null, mode, TestExecution.PLAN_VERIFICATION, false, "intent", List.of(), List.of(),
                 new AgentRequest.RepositoryContext(null, null, 0), tools, new AgentRequest.Limits(Duration.ofMinutes(1), 1000, 1.0, 500),
                 Map.of(), (ref, type) -> null);
         return fallback ? r.asFallback() : r;

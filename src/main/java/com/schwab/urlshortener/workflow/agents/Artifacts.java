@@ -7,6 +7,7 @@ public final class Artifacts {
     public static final String ARCHITECTURE_DESIGN = "architecture-design";
     public static final String IMPLEMENTATION_PLAN = "implementation-plan";
     public static final String CHANGE_PATCH = "change-patch";
+    public static final String INTERFACE_CONTRACT = "interface-contract";
     public static final String TEST_PLAN = "test-plan";
     public static final String TEST_REPORT = "test-report";
     public static final String RISK_ASSESSMENT = "risk-assessment";

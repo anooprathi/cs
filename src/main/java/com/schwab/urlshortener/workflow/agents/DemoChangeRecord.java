@@ -13,8 +13,9 @@ import java.util.Locale;
  * {@code docs/changes/run-{id}-{slug}.md}. It's a real file in a real git diff,
  * so the whole patch pipeline (change control, worktree, validation commands,
  * review, promotion, compensation) runs end to end without a model. It is NOT
- * product code, and its first line says so. Producing code changes requires LLM
- * mode.
+ * product code, and its first line says so. It's the demo fallback when no
+ * deterministic code recipe matches the requirement (see agents.recipes);
+ * general code changes require LLM mode.
  */
 final class DemoChangeRecord {
 
@@ -55,6 +56,7 @@ final class DemoChangeRecord {
         }
         return new PatchProposal("Add change record for '" + title + "' (demo patch).",
                 List.of(new PatchProposal.FileChange(path, md.toString(),
-                        "Records the planned change, its criteria, and its tasks for review (DETERMINISTIC_DEMO).")));
+                        "Records the planned change, its criteria, and its tasks for review (DETERMINISTIC_DEMO).")),
+                List.of(), List.of());
     }
 }

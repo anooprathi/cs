@@ -269,8 +269,16 @@ public class WorkspaceManager {
         }
     }
 
+    /** Full-output cap for a captured diff. Far above any patch change control allows (max-patch-bytes), so hitting it is a bug. */
+    static final int MAX_DIFF_CHARS = 8 * 1024 * 1024;
+
     private Applied diff(Workspace ws, List<ChangePatch.FileSummary> files) {
-        String diff = git(ws.directory(), "diff", "--cached", "--binary", "--no-color", ws.baseCommit()).output();
+        List<String> argv = List.of(git, "diff", "--cached", "--binary", "--no-color", ws.baseCommit());
+        ProcessRunner.Result full = ProcessRunner.run(argv, ws.directory(), timeout, null, MAX_DIFF_CHARS);
+        if (!full.succeeded() || full.outputTruncated()) {
+            throw new WorkspaceException("git diff failed or exceeded " + MAX_DIFF_CHARS + " chars: " + tail(full));
+        }
+        String diff = full.output();
         String stat = git(ws.directory(), "diff", "--cached", "--stat", "--no-color", ws.baseCommit()).output();
         return new Applied(diff, stat.strip(), List.copyOf(files));
     }

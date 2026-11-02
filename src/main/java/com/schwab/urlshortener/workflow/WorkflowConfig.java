@@ -1,8 +1,5 @@
 package com.schwab.urlshortener.workflow;
 
-import com.schwab.urlshortener.workflow.agents.CommandTestRunner;
-import com.schwab.urlshortener.workflow.agents.PlanVerificationTestRunner;
-import com.schwab.urlshortener.workflow.agents.TestRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -63,17 +60,5 @@ public class WorkflowConfig {
             return t;
         };
         return Executors.newCachedThreadPool(factory);
-    }
-
-    @Bean
-    public TestRunner workflowTestRunner(WorkflowProperties properties) {
-        WorkflowProperties.TestRunner cfg = properties.testRunner();
-        return switch (cfg.mode()) {
-            case WorkflowProperties.TestRunner.PLAN_VERIFICATION -> new PlanVerificationTestRunner();
-            case WorkflowProperties.TestRunner.COMMAND -> new CommandTestRunner(cfg.command(), cfg.timeout());
-            default -> throw new IllegalStateException("app.workflow.test-runner.mode must be '"
-                    + WorkflowProperties.TestRunner.PLAN_VERIFICATION + "' or '" + WorkflowProperties.TestRunner.COMMAND + "', was '"
-                    + cfg.mode() + "'");
-        };
     }
 }

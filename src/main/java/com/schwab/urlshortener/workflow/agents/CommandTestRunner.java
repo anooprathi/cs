@@ -17,10 +17,11 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Opt-in runner ({@code app.workflow.test-runner.mode=command}) that really
- * executes the configured test command, e.g.
- * {@code mvn -q test -Dtest={tests} -Djacoco.skip=true}, inside the run's
- * isolated workspace with the patch applied.
+ * The COMMAND test execution: really executes the configured test command, e.g.
+ * {@code mvn -q -o test -Dtest={tests} -Djacoco.skip=true}, inside the run's
+ * isolated workspace with the patch applied. {@code {tests}} covers the plan's
+ * existing test classes AND every test class the patch adds or changes, so a
+ * generated test is actually run, not just listed.
  *
  * Safety properties:
  *  - The command comes only from server configuration, never from a request or a model.
@@ -30,8 +31,9 @@ import java.util.regex.Pattern;
  *    target cannot inject an argument.
  *
  * Result mapping: one command run covers all targeted cases. Exit code 0 marks
- * them PASSED, anything else FAILED. A command without {@code {tests}} runs the
- * whole suite and covers every case.
+ * them PASSED, anything else FAILED. Each patch-added test class gets its own
+ * result row ({@code patch:<ClassName>}). A command without {@code {tests}} runs
+ * the whole suite and covers every case.
  */
 public class CommandTestRunner implements TestRunner {
 
@@ -65,8 +67,15 @@ public class CommandTestRunner implements TestRunner {
     }
 
     @Override
-    public TestReport run(TestPlan plan, RequirementSpec spec, Path workingTree) {
+    public TestReport run(TestPlan plan, RequirementSpec spec, Path workingTree, List<String> patchTests) {
         Set<String> classNames = new LinkedHashSet<>();
+        List<String> patchClasses = new ArrayList<>();
+        for (String target : Checks.safe(patchTests)) {
+            String simple = simpleClassName(target, workingTree);
+            if (simple != null && classNames.add(simple)) {
+                patchClasses.add(simple);
+            }
+        }
         List<TestPlan.TestCase> targeted = new ArrayList<>();
         List<TestPlan.TestCase> untargeted = new ArrayList<>();
         for (TestPlan.TestCase tc : Checks.safe(plan.testCases())) {
@@ -92,6 +101,7 @@ public class CommandTestRunner implements TestRunner {
         String detail = exec.exitCode() == null ? exec.error() : "command exit code " + exec.exitCode();
 
         List<TestReport.Result> results = new ArrayList<>();
+        patchClasses.forEach(c -> results.add(new TestReport.Result("patch:" + c, c, status, detail + " (test class in the patch)")));
         targeted.forEach(tc -> results.add(new TestReport.Result(tc.id(), tc.targetTestClass(), status, detail)));
         for (TestPlan.TestCase tc : untargeted) {
             results.add(needsTargets

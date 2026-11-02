@@ -57,8 +57,8 @@ Each stage is one `StageAgent`. Its contract (`engine/StageAgent.java`):
 |---|---|---|---|---|---|---|
 | requirements | `requirement-analysis` | REQUIREMENT_ANALYSIS | (raw requirement) | requirement-spec | catalog, LLM | RequirementAnalystAgent |
 | design | `architecture-design` | ARCHITECTURE_DESIGN | requirement-spec | architecture-design | artifacts, catalog, LLM | ImpactAnalystAgent |
-| implementation | `implementation` | IMPLEMENTATION | requirement-spec, architecture-design | implementation-plan, **change-patch** | + repo files, workspace write, validation commands | PlannerAgent + patch author |
-| tests | `test-generation-execution` | TEST_GENERATION_AND_EXECUTION | spec, design, plan, change-patch | test-plan, test-report | + test command | TestDesignerAgent + TestRunner |
+| implementation | `implementation` | IMPLEMENTATION | requirement-spec, architecture-design | implementation-plan, **change-patch**, **interface-contract** | + repo files, workspace write, validation commands | PlannerAgent + patch author (model, demo code recipe, or change record) |
+| tests | `test-generation-execution` | TEST_GENERATION_AND_EXECUTION | spec, design, plan, change-patch | test-plan, test-report | + test command | TestDesignerAgent + the run's TestRunner (plan verification, or the test command including the patch's own tests) |
 | security | `security-policy` | SECURITY_POLICY_VALIDATION | spec, design, plan, change-patch (+ raw requirement) | risk-assessment, policy-report | artifacts, catalog, LLM | RiskReviewerAgent + PolicyEngine |
 | docs | `documentation` | DOCUMENTATION | spec, design, plan | documentation | artifacts | deterministic |
 | release | `release-readiness` | RELEASE_READINESS | spec, plan, patch, test-report, policy-report, risks, docs | readiness-report | artifacts | deterministic |
@@ -170,7 +170,7 @@ All endpoints are under `/api/v1/workflows` and require `X-Admin-Key`.
 | GET | `/capabilities` | modes, agents with their gates and tools, limits, policies, workspace status |
 | GET | `/definitions/standard` | the standard graph |
 | POST | `/definitions/validate` | validate a graph (errors, order, layers) |
-| POST | `/runs` | submit a requirement (`title`, `requirement`, `mode?`, `definition?`, `demoFaults?`) → 201 CREATED |
+| POST | `/runs` | submit a requirement (`title`, `requirement`, `mode?`, `definition?`, `demoFaults?`, `testExecution?` = `PLAN_VERIFICATION`\|`COMMAND`) → 201 CREATED |
 | GET | `/runs`, `/runs/{id}` | list; status with every task, its gates, outputs, and approvals |
 | POST | `/runs/{id}/start` \| `/resume` | 202 (async by default) |
 | POST | `/runs/{id}/stop` \| `/cancel` | safe-stop / cancel (`{actor}`) |

@@ -92,7 +92,7 @@ class WorkflowEngineTest {
 
     private WorkflowViews.Run create(boolean approvalOnJoin, ExecutionMode mode) {
         return service.create(new WorkflowRequests.CreateRun("engine test", "Tenants must get a joined result.", mode,
-                FakeAgents.diamond(approvalOnJoin), null));
+                FakeAgents.diamond(approvalOnJoin), null, null));
     }
 
     private static WorkflowViews.Task task(WorkflowViews.Run run, String key) {

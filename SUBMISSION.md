@@ -1,152 +1,144 @@
-# Submission: AI-Assisted Software Engineering System — URL Shortener
+# Submission: Agentic SDLC System on a Multi-Tenant URL Shortener
 
-**Charles Schwab — Interview Assignment**
-
-This document is the entry point for evaluating this submission. It maps what's here back to the
-assignment's stated deliverables and evaluation criteria, explains how to run and verify it, and is honest
-about what's real versus what's aspirational — the same standard applied throughout the rest of this
-project's documentation.
+**Charles Schwab, Agentic-Proficient Software Engineer assignment.** This is the single entry point. It says
+what to run, what to read, what is real and what is simulated, and how this tree was verified.
 
 ---
 
 ## 1. What this is
 
-**Positioning, stated up front and unambiguously: this is a production-informed prototype, not a
-production-ready system.** It was built with real production concerns in mind — authentication, rate
-limiting, billing, observability — and a rigorous, adversarial self-review (and, separately, the candidate's
-own independent production-readiness review) found and fixed genuine issues along the way. But "informed by
-production concerns" and "ready to actually run in production" are different claims, and this project does
-not have everything the second one requires — no persistent database, no schema migrations, no CI/CD, no
-container image, no real administrative identity system beyond a single shared credential, and more (see the
-Production Readiness Roadmap in `README.md`). Every place in this document or elsewhere that could read as
-claiming otherwise should be read through this positioning, not around it.
+Two things in one Spring Boot 3.3 service:
 
-A multi-tenant URL shortener built with Spring Boot 3.3.4 / Spring Cloud / Spring Data JPA / H2, developed
-through iterative, AI-assisted engineering sessions. It went well beyond the assignment's minimum scope
-(core APIs, analytics, reliability) into a genuinely production-*informed* system: API-key authentication,
-per-tenant fair-share rate limiting, usage-based billing and PDF invoicing, a separate admin API for
-cross-tenant visibility, and a production-readiness pass (async execution, ACID hardening, observability,
-multi-instance/multi-DC-ready rate limiting) — followed by an independent production review that correctly
-pushed back on several places where "informed by" had drifted toward sounding like "ready for."
+1. **An agentic SDLC orchestrator** (`com.schwab.urlshortener.workflow`, `/api/v1/workflows`). This is what
+   the assignment asks for. It takes a free-text engineering requirement through an explicit 7-stage
+   dependency graph (requirements → design → implementation → tests ∥ security ∥ docs → release) and
+   carries it to a reviewed, tested patch on a local branch. Along the way it uses:
+   - entry and exit gates;
+   - persistent state with resume;
+   - versioned artifacts with decision lineage;
+   - human approvals bound to exact artifact versions;
+   - bounded retries and a defined fallback;
+   - isolated git worktrees and real validation and test commands;
+   - an append-only, hash-chained audit log, metrics, and a timeline.
 
-**Agentic SDLC layer, stated as plainly as the rest of this file:** the orchestrator (README §12) runs end to
-end in its default `DETERMINISTIC_DEMO` mode. That mode is rule-based templates, **not AI analysis**, and
-every artifact it produces says so. Its real-LLM mode (Claude via the official Anthropic Java SDK) is
-implemented and tested at the SDK boundary with a mocked client. It has **not** been run against the live
-API as part of this repository's verification. The opt-in smoke test that would do so is
-`AnthropicLiveSmokeTest`.
+   Nothing is ever merged, pushed, or deployed.
+2. **The system it works on**: a production-*informed* (not production-ready) multi-tenant URL shortener.
+   It has API-key auth, per-tenant fair-share rate limiting, usage billing and invoicing, and an admin API.
+   It also gives the orchestrator a real brownfield codebase to change.
 
-**Read these in this order:**
-1. This file — orientation and evaluation-criteria mapping.
-2. `README.md` — setup, how to run, full curl walkthrough for every endpoint.
-3. `ARCHITECTURE.md` — components, control flow, and the reasoning behind every non-obvious design decision.
-4. `ENGINEERING_SUMMARY.md` — the three required scenarios, AI-assisted execution traceability, and a
-   running account of every follow-up pass — including the ones that went wrong before they went right.
+A lighter **single-pass preview** (`/api/v1/agentic`) produces the same planning artifacts in one synchronous
+call, with no side effects. The orchestrator reuses its agents as graph stages. README §12 and §13 say when
+to use which.
 
-## 2. Deliverables checklist (per the assignment)
+## 2. Real versus simulated: read this before anything else
 
-| Required | Where |
+| Capability | Status |
 |---|---|
-| Working prototype (runnable end-to-end) | `mvn spring-boot:run` — see README §3 |
-| Architecture overview | `ARCHITECTURE.md` |
-| Three scenarios: greenfield, brownfield, ambiguous | `ENGINEERING_SUMMARY.md` §1-3 |
-| Setup instructions | README §3 |
-| Testing approach, limitations, trade-offs | README §9, ENGINEERING_SUMMARY.md §5, and the "Addendum" sections throughout that file |
-| Agentic SDLC orchestration layer (requirement → reviewable artifacts) | Plan: `IMPLEMENTATION_PLAN.md`. Usage and exact validation status: README §12 (§12.4 separates what's tested against a real model from what's tested against stubs). Design: ARCHITECTURE.md §8. Execution log: ENGINEERING_SUMMARY.md §17. Real sample output: `docs/agentic-sample-report.md` |
+| Orchestration: graph, scheduling, parallelism, gates, persistence, resume, re-planning, approvals, retries, fallback, cancel, rollback, audit, metrics | **Real**, tested, exercised by three end-to-end scenarios |
+| Default execution mode `DETERMINISTIC_DEMO` | **Not AI.** Stage agents are keyword rules and templates. Every artifact, report, and API response says so |
+| Code in demo mode | **Real code, for two recognized requirements only.** Two **pre-authored deterministic recipes** (`click-limit`, `expired-reactivation`) apply anchored edits to the worktree's real source and add integration tests. Any other requirement gets a change-record document (`kind: DOCUMENT`). Each patch's `author` says which it is (`recipe:<id>`, `change-record`, or `model`) |
+| Test execution | **Real when chosen** (`testExecution: COMMAND`): `mvn -B -o test -Dtest=<plan classes + the patch's own tests>` in the patched worktree. Greenfield and brownfield use it. The default (`PLAN_VERIFICATION`) runs no product tests and says so |
+| `LLM` mode (Claude via the official Anthropic Java SDK, structured outputs, token/cost budget) | **Implemented, tested against mocked and scripted clients. Never run against the live API** in this repository's verification. The opt-in `AnthropicLiveSmokeTest` exists and was skipped |
+| Human approvals in the scenarios | Made by a **scripted reviewer** through the same version-bound decision API a person uses |
+| The recoverable failure in the greenfield scenario | An **injected** transient fault (`demoFaults`), accepted only in demo mode and recorded in the audit trail |
+| Merge / push / deploy | **Not implemented, by design.** Promotion commits the approved diff to a local branch in a private sandbox clone |
 
-## 3. How to verify this submission
+The full list is in `docs/limitations-and-tradeoffs.md`.
+
+## 3. Run it (about 10 minutes)
+
+Requires JDK 17+, Maven 3.9+, git, and a local Maven repository populated by the first build (the scenario
+test stage runs Maven offline).
 
 ```bash
-mvn clean verify   # build + full test suite + JaCoCo coverage report
-mvn spring-boot:run -Dspring-boot.run.profiles=dev   # a profile is now required — see RequiredProfileGuard
+mvn clean verify                                     # build, all tests, 80% JaCoCo gate (includes the 3 scenarios)
+
+# the three end-to-end scenarios, no credentials; reports in target/workflow-scenarios/
+mvn spring-boot:run -Dspring-boot.run.profiles=dev \
+  -Dspring-boot.run.arguments="--app.workflow.cli.scenario=all --server.port=0"
+
+# or interactively: app on :8080, operator key admin-dev-only-key-change-me, Swagger UI at /swagger-ui.html
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# real LLM mode: separate, spends API credit, NOT run in this verification
+ANTHROPIC_API_KEY=... APP_AGENTIC_LLM_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=dev \
+  -Dspring-boot.run.arguments="--app.workflow.cli.scenario=greenfield --app.workflow.cli.mode=LLM --server.port=0"
 ```
 
-Swagger UI (`/swagger-ui.html`, disabled in the `prod` profile — see application-prod.properties) and the
-Postman collection (`postman/url-shortener.postman_collection.json`, 39 requests, auto-chaining, every
-request asserted) both give a working, exploratory path through every endpoint without reading code first.
+Committed copies of the scenario reports: `docs/demo-output/greenfield.md`, `brownfield.md`, `ambiguous.md`.
+Each one has the steps, an evidence table computed from the audit log, the final engineering summary, and
+the timeline.
 
-**Status: NOT YET independently verified for the current commit — stated plainly rather than glossed over.**
-The assistant that wrote this code never had a compiler available in its own environment (no access to Maven
-Central, no local `javac`); every fix made *during authoring* was a careful, hand-verified guess, not a
-compiler-confirmed one, and `ENGINEERING_SUMMARY.md` §9-10 document two occasions where that process got
-something wrong before getting it right. An earlier `mvn clean verify` run against a *prior* commit did pass,
-and separately, the candidate/author's own manual runtime testing found several real configuration issues
-(now fixed — see §17-19 of `ENGINEERING_SUMMARY.md`) that no unit test would have caught. But the codebase has
-changed materially since that last full `mvn clean verify` pass — the JaCoCo gate was raised back to 80%,
-new test classes were added to support that, and further security/billing fixes were applied — and **that
-specific, current commit has not yet had a fresh `mvn clean verify` run against it**. Treat any
-"verification passed" language elsewhere in this project's history as describing an earlier commit, not this
-one, until the table below is actually filled in from a real run.
+## 4. The three scenarios
 
-### Verification Record — `<TODO>` values below are not yet filled in for the current commit
+| Scenario | Requirement | What it demonstrates |
+|---|---|---|
+| **Greenfield** | Optional per-link click limits: 410 Gone once reached, 400 below 1, remaining clicks on stats | The `click-limit` recipe writes real code across entity, DTOs, repository (an atomic limit in the click-count `UPDATE`), cache projection, and service, plus a codemod over 40 existing test call sites and a new `ClickLimitIntegrationTest`. Also: an interface contract with migration DDL; **real `mvn test` in the worktree**; parallel tests/security/docs; an injected transient failure retried and recovered; a version-bound human approval; promotion to a local branch; and a formatting-only re-plan that reuses unaffected work and keeps the approval valid |
+| **Brownfield** | Refuse reactivation of expired links with 409 (plus an out-of-scope "charge the card" clause) | Impact analysis of existing modules. **A rejected policy gate** (POL-SCOPE) with no retry, while the independent branches finish. Then the amendment re-plans: the worktree is reset, and the `expired-reactivation` recipe adds the 409 guard and `ExpiredLinkReactivationIntegrationTest`, which really runs |
+| **Ambiguous** | "Make links safer and analytics more useful." | Ambiguities with proposed assumptions; a clarification checkpoint that holds all downstream work; a human rejection that goes **STALE** when the spec changes; re-planning on the clarified requirement. No recipe matches, so the patch is honestly a change record |
+
+Walkthrough with every check: `docs/demo-scenarios.md`.
+
+## 5. Verification record (this working tree)
 
 | Item | Value |
 |---|---|
-| Date verified | `<TODO: fill in — date of the verification run>` |
-| Commit verified | `<TODO: the exact git commit hash>` |
-| Java version | `<TODO: paste the output of` `java -version` `>` |
-| Maven version | `<TODO: paste the output of` `mvn -version` `>` |
-| Command run | `mvn clean verify` |
-| Test result | `<TODO: e.g. "Tests run: 187, Failures: 0, Errors: 0, Skipped: 0">` |
-| JaCoCo line coverage | `<TODO: the % from target/site/jacoco/index.html — confirm it actually clears 0.80>` |
-| Application smoke test | Started via `mvn spring-boot:run -Dspring-boot.run.profiles=dev`; create → redirect → stats → deactivate flow
-  confirmed working end-to-end |
-| Postman collection | `<TODO: confirm the current 39-request collection runs clean, including the rewritten rate-limit burst test>` |
+| Date | 2026-11-01 |
+| Tree | Commit `21d51c3` **plus this pass's uncommitted changes** (see `git status`) |
+| Java / Maven / OS | Java 21.0.4 (Oracle) / Maven 3.9.9 / Windows 10 |
+| `mvn clean verify` | **Tests run: 405, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`). All coverage checks met. BUILD SUCCESS in 5 min 06 s. `ScenarioEndToEndTest`: 3/3 passed in 167 s, including the real nested Maven test runs |
+| JaCoCo line coverage | **93.1%** (5,742/6,167) bundle-wide, clearing the 80% gate. `workflow` packages: 91.7% (3,747/4,088) |
+| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | Exit 0. Evidence checks: greenfield **11/11**, brownfield **10/10**, ambiguous **7/7**. Reports copied to `docs/demo-output/` |
+| Real tests inside the scenarios | Greenfield: `mvn -B -o test` on `ClickLimitIntegrationTest` plus 4 plan classes in the patched worktree, Maven reported **Tests run: 106, Failures: 0, Errors: 0, Skipped: 0**. Brownfield: `ExpiredLinkReactivationIntegrationTest` plus 3 plan classes, **Tests run: 80, Failures: 0, Errors: 0, Skipped: 0** |
+| Application smoke test | Not re-run by hand in this pass. `WorkflowApiIntegrationTest` and `UrlShortenerIntegrationTest` drive the real HTTP stack through MockMvc |
+| Postman / Newman (`postman/url-shortener.postman_collection.json`, 62 requests) | **Not run in this pass.** Newman isn't installed in the verification environment. The collection covers the URL-shortener API only, not the workflow API |
+| Live Anthropic API | **Not run** (`AnthropicLiveSmokeTest` skipped) |
+| OWASP dependency-check | **Not run** (needs a multi-gigabyte NVD download) |
 
-The `<TODO>` placeholders are deliberate — those exact figures exist only in the verifier's own terminal
-output, not in the environment that authored this document, and a fabricated number here would undermine
-the credibility of everything else in this submission far more than an honestly-incomplete table does.
+Static-analysis and secret-scan results from the previous pass are in `SUBMISSION_NOTES.md`.
 
-## 4. Evaluation criteria — where to look
+## 6. Where to look, by evaluation criterion
 
 | Criterion | Where |
 |---|---|
-| Effectiveness of AI-assisted engineering execution | `ENGINEERING_SUMMARY.md` — traceability log (generated/edited/rejected, with rationale) in every scenario and addendum |
-| Architecture / system design quality | `ARCHITECTURE.md` — component diagrams, control flow, and a running design-decisions table |
-| Depth of decomposition and execution quality | `ENGINEERING_SUMMARY.md` §1-3 (task decomposition with dependencies), and each addendum's own decomposition section |
-| Realism/quality of outputs | The running code itself, plus the Postman collection and curl walkthrough as executable proof, not just described behavior |
-| Validation and risk management rigor | Every addendum in `ENGINEERING_SUMMARY.md` names its own risk and how it was checked (or admits it wasn't, and why that's the honest answer) |
-| Clarity and defensibility of decisions | The design-decisions table in `ARCHITECTURE.md` — every non-obvious choice has its rationale next to it, not just the choice |
-| Core engineering principles (modular, testable, reliable, secure, scalable, safe change management) | See §5 below |
-| Engineering judgment | Scope boundaries held throughout: billing never touches real payment processing; Jackson 3 adoption was deliberately deferred rather than attempted unverified; "multi data center" support draws an explicit line between application code and infrastructure rather than overclaiming either way (`ARCHITECTURE.md` §7.4) |
+| Agentic SDLC design and orchestration | `ARCHITECTURE.md` §9 (and §8 for the preview), `docs/architecture.md`, `docs/orchestration.md` |
+| Requirement → implementation traceability | `SUBMISSION_NOTES.md`: every assignment requirement, with its code location, demo command, and validation evidence |
+| Governance, safety, human-in-the-loop | `docs/governance.md`: version-bound approvals, staleness, policies, change control, rollback boundaries |
+| Realism and quality of outputs | `docs/demo-output/*.md`: real runs. The greenfield patch is a real diff against this repository, and its tests ran |
+| AI-assisted execution: what was generated, edited, or rejected, and why | `ENGINEERING_SUMMARY.md` §18 (orchestrator) and §17 (preview). Both include the bugs found only by running the system |
+| Validation and risk management | Scenario evidence checks (computed from the audit log, not asserted by the script); `WorkflowEngineTest` as the behavioral spec; `docs/limitations-and-tradeoffs.md` |
+| Engineering judgment | §2 above; the "Rejected" lists in `ENGINEERING_SUMMARY.md` §17-18; the design-decision tables in `ARCHITECTURE.md` §8.2 and §9.3 |
+| The URL shortener itself | `README.md` §1-11, `ARCHITECTURE.md` §1-7, `ENGINEERING_SUMMARY.md` §1-16 |
 
-## 5. Core engineering principles — a direct accounting
+**Files to read first:**
+1. `workflow/engine/WorkflowEngine.java`: scheduling, gates, retries, fallback, resume, re-planning.
+2. `workflow/engine/StageAgent.java`, `AgentRequest.java`, `AgentResult.java`: the agent contract.
+3. `workflow/agents/ImplementationAgent.java` and `workflow/agents/recipes/`: patch authoring and the
+   demo recipes.
+4. `workflow/WorkflowService.java`: approvals, promotion, amendment.
+5. `workflow/workspace/WorkspaceManager.java`: isolation and rollback.
+6. `docs/demo-output/greenfield.md`: what a real run produces.
 
-- **Modular**: SOLID-principles pass explicitly documented in `ENGINEERING_SUMMARY.md` — extracted
-  `ShortCodeGenerator`, `UrlMappingMapper`, `RateLimiterBackend`/`UrlSafetyChecker` strategy interfaces;
-  collapsed a 9-way exception-to-handler mapping into one `ApiException` hierarchy plus two justified
-  exceptions to that rule.
-- **Testable**: unit tests isolated from Spring/the database for every service; slice tests for the REST
-  contract; integration tests for the full stack. JaCoCo-enforced coverage floor in the build itself
-  (`pom.xml`), not just a claim in a document.
-- **Reliable**: reliability features beyond the assignment's minimum — atomic click-count increments (no
-  read-modify-write race), collision-retry with a bounded ceiling for short-code generation, scheduled
-  cleanup of expired links, and (this pass) `DataIntegrityViolationException` handling that turns a real
-  concurrency race into a clean `409` instead of an unhandled `500`.
-- **Secure**: hashed API keys (constant-time comparison for the admin credential specifically), fail-closed
-  admin authentication (no configured key means admin access is *disabled*, never silently open), tenant
-  isolation enforced at the database-query level (not just an application-level `if`), cross-tenant lookups
-  returning `404` rather than `403` so they don't even confirm another tenant's data exists.
-- **Scalable**: async execution off the hot redirect path; a swappable rate-limiter backend
-  (`RateLimiterBackend` — local for a single instance, Redis for multi-instance/multi-DC) as the concrete,
-  applied answer to "what would need to change to run more than one instance of this."
-- **Safe change management**: every properties file documents *why* a value is what it is, not just the
-  value; every profile (`dev`/`prod`/`test`) is explicit about what it changes and why; the Spring Boot 4
-  migration attempt was reverted cleanly back to a known-good baseline rather than left half-migrated when
-  it hit a real, unresolvable-in-scope framework gap.
+## 7. Core engineering principles, briefly
 
-## 6. A note on this repository's git history
+- **Modular.** The orchestrator is a separate package with a one-way dependency on the preview's agents.
+  Stage agents, execution adapters, test runners, and recipes are interfaces with swappable implementations.
+- **Testable.** Unit tests per component. Real-git workspace tests. API tests through the security chain.
+  Three end-to-end scenarios whose checks are computed from the audit log. An 80% JaCoCo gate in the build.
+- **Reliable.** Short transactions. Resume after a crash (RUNNING → INTERRUPTED → resumable). Bounded
+  retries for transient failures only, never for policy or gate failures. Input fingerprints, so resume
+  doesn't repeat valid work.
+- **Secure.** Operator-only API (fail-closed). No shell, argv-only commands from configuration only.
+  A path allowlist, with protected paths that need approval. Model output and repository content are
+  treated as untrusted. Secret redaction in every audit event.
+- **Safe change management.** Patches exist only in per-run worktrees and are re-applied from their exact
+  diff. Approvals bind to artifact hashes and go stale on change. Promotion is an explicit, approved, local
+  action with compensation.
 
-This repository's git history was initialized and its commits organized retroactively, once the system
-reached its current state — not built up commit-by-commit in real time from an empty repository. The commit
-sequence groups the **final** state of the codebase into a coherent, logically-ordered narrative (scaffold →
-core domain → API → tenancy → security → rate limiting → billing/invoicing → supporting infrastructure →
-admin API → tests → docs), with commit messages that accurately describe the reasoning behind each piece —
-but it is **not** a literal replay of the intermediate states the code actually passed through during
-development (including, notably, an entire Spring Boot 4 migration attempt and revert that isn't visible as
-its own back-and-forth in this history, even though `ENGINEERING_SUMMARY.md` §8-10 document that episode in
-full). Stated plainly rather than left for a reader to discover: a few individual commits, taken in
-isolation, are not independently compilable snapshots (a file added in one commit may reference a class not
-introduced until a later commit in this sequence) — the history is organized by *theme*, not guaranteed to
-be bisectable. `git log --oneline --reverse` gives an accurate high-level narrative of how this system is
-structured and why; it is not a forensic record of the actual editing session.
+## 8. Git history
+
+The URL-shortener commits (everything before `55e5fc2`) were organized retroactively by theme. They are not
+a literal replay of the editing session, and individual early commits are not guaranteed to compile in
+isolation. `ENGINEERING_SUMMARY.md` §8-10 documents the history that isn't visible, including a reverted
+Spring Boot 4 migration. The agentic and orchestrator commits (`55e5fc2` onward) were made as the work
+happened.

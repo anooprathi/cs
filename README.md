@@ -800,6 +800,13 @@ hide it):
 
 ## 12. Agentic SDLC Orchestration Layer
 
+> **§12 or §13?** This section's `/api/v1/agentic` is the lightweight, synchronous, **single-pass preview**:
+> six planning artifacts and one human decision in milliseconds, with no side effects. §13's
+> `/api/v1/workflows` is the **full SDLC orchestrator**. It reuses these same agents as graph stages and adds
+> gates, persistence and resume, version-bound approvals, retries, isolated git worktrees, real patches and
+> test runs, audit, and metrics. Use §12 to ask "what would this change involve?" and §13 to carry the change
+> through.
+
 An operator-facing capability that turns a free-text **engineering requirement** into **reviewable
 artifacts**, checks them with a deterministic quality gate, and records a human review decision. Design:
 `ARCHITECTURE.md` §8. Plan: `IMPLEMENTATION_PLAN.md`. Execution log: `ENGINEERING_SUMMARY.md` §17. A
@@ -931,6 +938,32 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments="
 ANTHROPIC_API_KEY=... APP_AGENTIC_LLM_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=dev \
   -Dspring-boot.run.arguments="--app.workflow.cli.scenario=greenfield --app.workflow.cli.mode=LLM --server.port=0"
 ```
+
+What a demo-mode run produces, stated exactly:
+- **Real code, for exactly two recognized requirements.** The greenfield click-limit and brownfield
+  expired-reactivation scenarios are matched by **pre-authored deterministic code recipes**. These are
+  rule-based and not AI. They edit the worktree's real source, add an integration test, and declare an exact
+  API/schema contract (`interface-contract` artifact).
+- **A change record otherwise.** Any other requirement gets a change-record document instead (the ambiguous
+  scenario). The patch's `kind` (CODE/DOCUMENT) and `author` (`recipe:<id>`, `change-record`, `model`) say
+  which one you got. General code changes need LLM mode.
+- **Tests, chosen per run (`testExecution`).** `PLAN_VERIFICATION` (the configured default) runs no product
+  tests. `COMMAND` runs `mvn -B -o test -Dtest=<plan classes + the patch's own test classes>` in the patched
+  worktree. The greenfield and brownfield scenarios use `COMMAND`, which needs a warm local Maven repository
+  (`-o`) and takes roughly one to three minutes per test stage.
+
+```bash
+# submit a run that executes real tests in its worktree
+curl -s -X POST http://localhost:8080/api/v1/workflows/runs -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{"title":"Click limits","requirement":"Tenants must be able to set an optional maximum click limit when creating a short link.\nWhen the click limit is reached, the redirect must return 410 Gone.","testExecution":"COMMAND"}'
+```
+
+Each run's final engineering summary (the first part of `GET /api/v1/workflows/runs/{id}/report.md`) covers:
+- what was built (the patch, its provenance, the test execution, and the interface contract);
+- the plan and the recorded rationale for each key decision;
+- risks and trade-offs;
+- assumptions: approved, but not confirmed by the requirement owner;
+- what the run did not do.
 
 Docs: `docs/architecture.md`, `docs/orchestration.md` (API table), `docs/governance.md`, `docs/demo-scenarios.md`,
 `docs/limitations-and-tradeoffs.md`, `SUBMISSION_NOTES.md`.

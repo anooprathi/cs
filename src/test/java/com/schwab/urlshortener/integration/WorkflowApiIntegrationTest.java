@@ -67,7 +67,7 @@ class WorkflowApiIntegrationTest {
                 .andExpect(jsonPath("$.agents", hasSize(7)))
                 .andExpect(jsonPath("$.agents[*].stage", hasItems("REQUIREMENT_ANALYSIS", "ARCHITECTURE_DESIGN", "IMPLEMENTATION",
                         "TEST_GENERATION_AND_EXECUTION", "SECURITY_POLICY_VALIDATION", "DOCUMENTATION", "RELEASE_READINESS")))
-                .andExpect(jsonPath("$.testRunner", startsWith("plan-verification")));
+                .andExpect(jsonPath("$.testRunner", startsWith("default plan-verification; COMMAND runs [mvn")));
         admin(post(BASE + "/definitions/validate").contentType(MediaType.APPLICATION_JSON).content("""
                 {"name":"cyclic","version":1,"tasks":[
                   {"key":"a","agent":"requirement-analysis","dependsOn":["b"]},
@@ -101,8 +101,15 @@ class WorkflowApiIntegrationTest {
                 .andExpect(jsonPath("$.tasks[?(@.key=='implementation')].outputs['change-patch']", hasSize(1)));
 
         admin(get(BASE + "/runs/" + id + "/artifacts")).andExpect(status().isOk()).andExpect(jsonPath("$[*].name", hasItems(
-                "requirement-spec", "architecture-design", "implementation-plan", "change-patch", "test-plan", "test-report",
-                "risk-assessment", "policy-report", "documentation", "readiness-report")));
+                "requirement-spec", "architecture-design", "implementation-plan", "change-patch", "interface-contract", "test-plan",
+                "test-report", "risk-assessment", "policy-report", "documentation", "readiness-report")));
+        // no demo recipe recognizes "add a note", so the patch is a change record with a derived (not exact) contract
+        admin(get(BASE + "/runs/" + id + "/artifacts/change-patch")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.kind").value("DOCUMENT"))
+                .andExpect(jsonPath("$.content.author").value("change-record"));
+        admin(get(BASE + "/runs/" + id + "/artifacts/interface-contract")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.source").value("DERIVED_PROPOSAL"))
+                .andExpect(jsonPath("$.markdown", containsString("not an exact contract")));
         admin(get(BASE + "/runs/" + id + "/artifacts/test-report")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.productTestsExecuted").value(false))
                 .andExpect(jsonPath("$.markdown", containsString("_Origin:")));
@@ -135,7 +142,15 @@ class WorkflowApiIntegrationTest {
                 .andExpect(jsonPath("$.definitions.mttr", containsString("mean")));
         admin(get(BASE + "/metrics")).andExpect(status().isOk()).andExpect(jsonPath("$.runs", greaterThanOrEqualTo(1)));
         admin(get(BASE + "/runs/" + id + "/report.md")).andExpect(status().isOk())
-                .andExpect(content().string(containsString("Final engineering summary")));
+                .andExpect(content().string(containsString("Final engineering summary")))
+                .andExpect(content().string(containsString("### What was built")))
+                .andExpect(content().string(containsString("DOCUMENT by `change-record`")))
+                .andExpect(content().string(containsString("### Plan and rationale")))
+                .andExpect(content().string(containsString("| T-1 |")))
+                .andExpect(content().string(containsString("_Why:_")))
+                .andExpect(content().string(containsString("### Risks and trade-offs")))
+                .andExpect(content().string(containsString("### Assumptions")))
+                .andExpect(content().string(containsString("the patch is a change-record document")));
         admin(post(BASE + "/runs/" + id + "/promotion").contentType(MediaType.APPLICATION_JSON).content(json(Map.of(
                 "reviewer", "eng-lead", "patchVersion", 1, "confirm", true))))
                 .andExpect(status().isConflict())

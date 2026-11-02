@@ -12,6 +12,7 @@ import com.schwab.urlshortener.workflow.engine.AgentResult;
 import com.schwab.urlshortener.workflow.engine.GateCriterion;
 import com.schwab.urlshortener.workflow.engine.GateCriterion.Result;
 import com.schwab.urlshortener.workflow.engine.StageAgent;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import com.schwab.urlshortener.workflow.engine.ToolPolicy;
 import com.schwab.urlshortener.workflow.graph.WorkflowStage;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
@@ -25,27 +26,40 @@ import java.util.Set;
 
 /**
  * TEST_GENERATION_AND_EXECUTION stage agent: generates a test plan (demo or LLM),
- * then executes it with the configured {@link TestRunner} against the run's
- * worktree, with the change-patch re-applied from its exact diff, so it tests
- * the reviewed patch and nothing else. Produces test-plan and test-report,
- * possibly of different origin.
+ * then executes it against the run's worktree, with the change-patch re-applied
+ * from its exact diff, so it tests the reviewed patch and nothing else. The run's
+ * {@link TestExecution} picks the {@link TestRunner}: plan verification, or the
+ * configured test command, which also runs every test class the patch adds or changes.
+ * Produces test-plan and test-report, possibly of different origin.
  */
 @Component
 public class TestGenerationAgent implements StageAgent {
 
     private final TestDesignerAgent designer;
     private final AgentStageRunner runner;
-    private final TestRunner testRunner;
+    private final TestRunner planVerification = new PlanVerificationTestRunner();
+    private final TestRunner command;
     private final WorkspaceManager workspaces;
     private final Path repositoryRoot;
 
-    public TestGenerationAgent(TestDesignerAgent designer, AgentStageRunner runner, TestRunner testRunner,
-                               WorkspaceManager workspaces, WorkflowProperties properties) {
+    public TestGenerationAgent(TestDesignerAgent designer, AgentStageRunner runner, WorkspaceManager workspaces,
+                               WorkflowProperties properties) {
         this.designer = designer;
         this.runner = runner;
-        this.testRunner = testRunner;
+        WorkflowProperties.TestRunner cfg = properties.testRunner();
+        this.command = cfg.command().isEmpty() ? null : new CommandTestRunner(cfg.command(), cfg.timeout());
         this.workspaces = workspaces;
         this.repositoryRoot = Path.of(properties.repositoryRoot()).toAbsolutePath().normalize();
+    }
+
+    private TestRunner runnerFor(AgentRequest request) {
+        if (request.testExecution() != TestExecution.COMMAND) {
+            return planVerification;
+        }
+        if (command == null) {
+            throw new IllegalStateException("testExecution COMMAND but app.workflow.test-runner.command is not configured");
+        }
+        return command;
     }
 
     @Override
@@ -53,10 +67,10 @@ public class TestGenerationAgent implements StageAgent {
         return "test-generation-execution";
     }
 
-    /** Includes the runner name: switching runners changes what "executed" means, so prior reports must not be reused. */
+    /** The runner choice is in the input fingerprint via the run's test execution, so the version stays fixed. */
     @Override
     public String version() {
-        return "2+" + testRunner.name();
+        return "3";
     }
 
     @Override
@@ -66,8 +80,8 @@ public class TestGenerationAgent implements StageAgent {
 
     @Override
     public String description() {
-        return "Generates test cases per acceptance criterion and executes them against the patched workspace with the '"
-                + testRunner.name() + "' runner.";
+        return "Generates test cases per acceptance criterion and executes them against the patched workspace "
+                + "(plan verification, or the configured test command including the patch's own tests).";
     }
 
     @Override
@@ -152,8 +166,10 @@ public class TestGenerationAgent implements StageAgent {
             workingTree = ws.directory();
             tree = "isolated workspace with " + Artifacts.CHANGE_PATCH + " " + request.inputRefs().get(Artifacts.CHANGE_PATCH).label() + " applied";
         }
+        TestRunner testRunner = runnerFor(request);
         request.requireTool(testRunner.requiredTool());
-        TestReport report = testRunner.run(plan, request.input(Artifacts.REQUIREMENT_SPEC, RequirementSpec.class), workingTree);
+        TestReport report = testRunner.run(plan, request.input(Artifacts.REQUIREMENT_SPEC, RequirementSpec.class), workingTree,
+                patch.testFiles());
         return new AgentResult(AgentResult.Status.COMPLETED,
                 "Generated " + Checks.safe(plan.testCases()).size() + " test cases and executed them with '" + testRunner.name()
                         + "': " + report.passed() + " passed, " + report.failed() + " failed, " + report.notExecuted() + " not executed.",
@@ -164,8 +180,9 @@ public class TestGenerationAgent implements StageAgent {
                         Checks.evidence("product test suite executed", report.productTestsExecuted(), report.notice())),
                 List.of("Tests ran against: " + tree + "."),
                 report.productTestsExecuted() ? List.of() : List.of("No product test was executed (plan verification only)."),
-                List.of(Checks.decision("Executed with runner '" + testRunner.name() + "'.",
-                                "Configured by app.workflow.test-runner.mode; commands are never taken from the plan."),
+                List.of(Checks.decision("Executed with runner '" + testRunner.name() + "'"
+                                        + (patch.testFiles().isEmpty() ? "." : ", including patch tests " + patch.testFiles() + "."),
+                                "The run's testExecution (" + request.testExecution() + "); commands come only from configuration, never from the plan."),
                         Checks.decision("Test plan by " + Checks.producedBy(g) + ".", "Execution mode of the run.")),
                 null, null, g.usage());
     }

@@ -1,6 +1,7 @@
 package com.schwab.urlshortener.workflow.api;
 
 import com.schwab.urlshortener.agentic.model.ExecutionMode;
+import com.schwab.urlshortener.workflow.engine.TestExecution;
 import com.schwab.urlshortener.workflow.graph.WorkflowDefinition;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
@@ -20,14 +21,17 @@ public final class WorkflowRequests {
      * standard 7-stage graph). {@code demoFaults} (task key → number of attempts
      * that fail with an injected TRANSIENT fault) is accepted only for
      * DETERMINISTIC_DEMO runs, to demonstrate retry and recovery. It's recorded
-     * on the run and in the audit trail.
+     * on the run and in the audit trail. {@code testExecution} picks how the TEST
+     * stage runs (default: {@code app.workflow.test-runner.mode}); COMMAND needs a
+     * configured {@code app.workflow.test-runner.command}.
      */
     public record CreateRun(
             @NotBlank @Size(max = 200) String title,
             @NotBlank @Size(max = 10_000) String requirement,
             ExecutionMode mode,
             WorkflowDefinition definition,
-            Map<String, Integer> demoFaults
+            Map<String, Integer> demoFaults,
+            TestExecution testExecution
     ) {
     }
 

@@ -19,8 +19,13 @@ It also includes three runnable end-to-end scenarios.
 **Honesty up front:**
 - **Demo mode is not AI.** It is rule-based and needs no credentials. The real-LLM adapter (Anthropic Java SDK) is
   implemented and tested against mocked or scripted clients, and **was not run against the live API**.
-- **The demo patch is a change-record document, not product code.**
-- **The default test runner verifies the test plan and runs no product tests.**
+- **Demo-mode code comes from two pre-authored, rule-based recipes, not from a model.** `click-limit`
+  (greenfield) and `expired-reactivation` (brownfield) edit the worktree's real source and add integration
+  tests. Any other requirement gets a change-record document, not product code. Each patch's `kind` and
+  `author` say which one it is.
+- **Test execution is chosen per run.** `PLAN_VERIFICATION` (the default) runs no product tests. `COMMAND`
+  runs real `mvn -o test` on the plan's classes plus the patch's own tests, in the worktree. The greenfield
+  and brownfield scenarios use `COMMAND`. It does not run the full suite or the coverage gate.
 - **Nothing is ever merged, pushed, or deployed.**
 
 `docs/limitations-and-tradeoffs.md` lists every simulated or unimplemented capability.
@@ -76,7 +81,10 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 | Code changes in an isolated workspace / git worktree | `workspace/WorkspaceManager` (sandbox clone + per-run worktree) | greenfield: patch + promotion | `WorkspaceManagerTest` (real git, source repository untouched) |
 | Restrict tools, paths, commands, time, tokens/cost | `ToolPolicy`, `ChangeControlPolicy`, `ProcessRunner`, `limits.*`, `BudgetLedger` | `GET /capabilities` | `ChangeControlPolicyTest`, `ExecutionAdaptersTest#…budget…`, `PolicyAndRunnersTest#commandRunner_timesOut` |
 | Repository content and model output untrusted; no model shell commands | `PatchProposal` (no command field), delimiters, typed outputs, argv-only commands from config | n/a | `ChangeControlPolicyTest`, `WorkspaceManagerTest#apply_refusesToWriteOutsideTheWorktree_…` |
-| Reviewable patches + approved validation commands | `ImplementationAgent`, `ChangePatch`, `policy.validation-commands` | greenfield `change-patch` | scenario check "Patch applied in an isolated git worktree and validated" |
+| Reviewable patches + approved validation commands | `ImplementationAgent`, `ChangePatch` (`kind`, `author`, diff, validation evidence), `policy.validation-commands` | greenfield `change-patch` | scenario check "Patch applied in an isolated git worktree and validated" |
+| Real code change and test in demo mode (greenfield + brownfield) | `agents/recipes/` (`ClickLimitRecipe`, `ExpiredReactivationRecipe`, anchored `SourceEdits` + test-call-site codemod) | greenfield, brownfield | `CodeRecipesTest`; scenario check "Real code change: CODE patch with tests, executed by the real test command" |
+| Tests executed against the patched worktree | `TestExecution` (per run), `CommandTestRunner` (+ the patch's own test classes), `ProcessRunner` (Windows `.cmd` resolution) | `"testExecution":"COMMAND"` | `PolicyAndRunnersTest#commandRunner_alsoRunsTheTestClassesThePatchAdds`, `ScenarioEndToEndTest` (real nested `mvn test`) |
+| API / schema definition artifact | `artifact/InterfaceContract` (`interface-contract`), gate IMP-EXIT-7 | greenfield (3 API changes + DDL) | `PolicyAndRunnersTest#contractGate_…`; scenario check "Interface contract declares …" |
 | Human approval before merging/deploying | `WorkflowService.promote` (valid approval + bound patch + confirm) | greenfield promotion | `WorkspaceManagerTest#promote_…`, `WorkflowApiIntegrationTest` (promotion refused without workspace) |
 
 ### Governance and recovery
@@ -105,6 +113,7 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 | Append-only interface + integrity limitations | `WorkflowEventRepository` (no update/delete), `@PreUpdate`, per-run SHA-256 chain, `/audit/verify` | `GET /runs/{id}/audit/verify` | `WorkflowEngineTest#auditChain_isIntact_andDetectsTampering`; limits in `docs/governance.md` §6 |
 | Metrics with precise definitions | `metrics/WorkflowMetricsService` (+ Micrometer counters) | `GET /api/v1/workflows/metrics` | `WorkflowMetricsServiceTest` (5 tests pin each definition) |
 | Readable execution timeline | `WorkflowReports.timeline` (span chart + event table) | `GET /runs/{id}/timeline` | `WorkflowApiIntegrationTest`, `docs/demo-output/*.md` |
+| Final engineering summary: plan and rationale, risks and trade-offs, assumptions, what was built | `WorkflowReports.summary` (from the accepted artifacts and each stage's recorded decisions) | `GET /runs/{id}/report.md` | `WorkflowApiIntegrationTest#fullRun_throughTheApi` (asserts every section); `docs/demo-output/*.md` |
 
 ### Scenarios
 
@@ -116,13 +125,15 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 
 ## Verification (this working tree)
 
-Run on 2026-11-01, Java 21.0.4 / Maven 3.9.9, Windows 10.
+Run on 2026-11-01, Java 21.0.4 / Maven 3.9.9, Windows 10. The build, scenario, and CLI rows are from this
+pass (real code recipes, per-run test execution). The `javac -Xlint`, SpotBugs, and credential-scan rows are
+from the previous pass and were not re-run.
 
 | Check | Result |
 |---|---|
-| `mvn clean verify` | **394 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo 80% line gate met. BUILD SUCCESS |
-| Workflow tests (subset of the above) | 72 tests across 10 classes, all passing. `WorkspaceManagerTest` and `ScenarioEndToEndTest` use real git |
-| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 9/9, brownfield 8/8, ambiguous 7/7 evidence checks, exit 0. Reports in `docs/demo-output/` |
+| `mvn clean verify` | **405 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.1% (workflow packages 91.7%), clearing the 80% gate. BUILD SUCCESS |
+| Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree. Maven reported 106 and 80 tests, 0 failures |
+| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 11/11, brownfield 10/10, ambiguous 7/7 evidence checks, exit 0. Reports in `docs/demo-output/` |
 | `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 27 `[serial]` (exceptions without `serialVersionUID`, same as the existing exception classes), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API), 1 annotation-processor notice |
 | SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 229 findings before fixes. Fixed 5 null-path and 2 map-iteration findings in new code; 224 remain: 213 `EI_EXPOSE_REP/REP2` (Spring/Lombok false positives), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 3 `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` (not re-triaged after the fixes), 1 format-string newline, 1 `DM_EXIT` (the CLI's exit code) |
 | Credential-pattern scan (`git grep`, tracked files, same patterns as `SecretPatterns`) | Only deliberate synthetic test fixtures. One fixture derived from a real dev key was replaced with a synthetic value |

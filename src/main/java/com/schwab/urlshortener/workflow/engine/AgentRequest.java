@@ -41,6 +41,7 @@ public class AgentRequest {
     private final String title;
     private final String requirement;
     private final ExecutionMode mode;
+    private final TestExecution testExecution;
     private final boolean fallback;
     private final String intent;
     private final List<String> constraints;
@@ -54,7 +55,7 @@ public class AgentRequest {
     private final Set<String> accessed = ConcurrentHashMap.newKeySet();
 
     public AgentRequest(Long runId, String taskKey, int attempt, String agentId, String title, String requirement,
-                        ExecutionMode mode, boolean fallback, String intent, List<String> constraints,
+                        ExecutionMode mode, TestExecution testExecution, boolean fallback, String intent, List<String> constraints,
                         List<String> acceptanceCriteria, RepositoryContext repository, ToolPolicy toolPolicy, Limits limits,
                         Map<String, ArtifactRef> inputs, BiFunction<ArtifactRef, Class<?>, Object> loader) {
         this.runId = runId;
@@ -64,6 +65,7 @@ public class AgentRequest {
         this.title = title;
         this.requirement = requirement;
         this.mode = mode;
+        this.testExecution = testExecution;
         this.fallback = fallback;
         this.intent = intent;
         this.constraints = List.copyOf(constraints);
@@ -110,6 +112,11 @@ public class AgentRequest {
 
     public ExecutionMode mode() {
         return mode;
+    }
+
+    /** How the run's TEST stage executes its plan (fixed at run creation). */
+    public TestExecution testExecution() {
+        return testExecution;
     }
 
     /** True when this execution is the defined fallback: the deterministic path after an LLM failure. */
@@ -192,7 +199,7 @@ public class AgentRequest {
         java.util.EnumSet<ToolPolicy.Tool> tools = toolPolicy.allowedTools().isEmpty()
                 ? java.util.EnumSet.noneOf(ToolPolicy.Tool.class) : java.util.EnumSet.copyOf(toolPolicy.allowedTools());
         tools.remove(ToolPolicy.Tool.LLM_GENERATE);
-        return new AgentRequest(runId, taskKey, attempt, agentId, title, requirement, mode, true, intent, constraints,
+        return new AgentRequest(runId, taskKey, attempt, agentId, title, requirement, mode, testExecution, true, intent, constraints,
                 acceptanceCriteria, repository, new ToolPolicy(tools), limits, inputs, loader);
     }
 

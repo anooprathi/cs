@@ -45,7 +45,7 @@ public class PlanVerificationTestRunner implements TestRunner {
     }
 
     @Override
-    public TestReport run(TestPlan plan, RequirementSpec spec, Path workingTree) {
+    public TestReport run(TestPlan plan, RequirementSpec spec, Path workingTree, List<String> patchTests) {
         Set<String> criteria = Checks.criterionIds(spec);
         List<TestReport.Result> results = new ArrayList<>();
         for (TestPlan.TestCase tc : Checks.safe(plan.testCases())) {

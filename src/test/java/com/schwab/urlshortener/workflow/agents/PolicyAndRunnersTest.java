@@ -10,7 +10,9 @@ import com.schwab.urlshortener.workflow.WorkflowProperties;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport;
 import com.schwab.urlshortener.workflow.artifact.TestReport;
 import com.schwab.urlshortener.workflow.audit.SecretPatterns;
+import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
+import com.schwab.urlshortener.workflow.workspace.ProcessRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,8 +29,8 @@ class PolicyAndRunnersTest {
     private final AgentContext ctx = AgenticFixtures.runDeterministicPipeline(AgenticFixtures.TITLE, AgenticFixtures.REQUIREMENT);
     private final PolicyEngine engine = new PolicyEngine(AgenticFixtures.catalog(), new ObjectMapper(),
             new WorkflowProperties(0, null, null, null, null, null, null, null, null, null, null));
-    private final ChangePatch cleanPatch = new ChangePatch("s", "abc", true, true, List.of(), "diff --git a/x b/x", "1 file", List.of(),
-            List.of(), List.of(), null);
+    private final ChangePatch cleanPatch = new ChangePatch("s", ChangePatch.Kind.DOCUMENT, "change-record", "abc", true, true, List.of(), List.of(),
+            "diff --git a/x b/x", "1 file", List.of(), List.of(), List.of(), null);
 
     private PolicyReport evaluate(String requirement, ImpactAnalysis design, RiskAssessment risks, ChangePatch patch) {
         return engine.evaluate(requirement, ctx.requirementSpec(), design, ctx.implementationPlan(), risks, patch);
@@ -47,7 +49,8 @@ class PolicyAndRunnersTest {
     @Test
     void secretInRequirementOrPatch_isABlocker_andIsMasked() {
         PolicyReport r = evaluate(AgenticFixtures.REQUIREMENT + "\nRepro: X-API-Key: usk_SYNTHETICtestKEY000000000000", ctx.impactAnalysis(),
-                ctx.riskAssessment(), new ChangePatch("s", "b", true, true, List.of(), "+password = hunter22", "", List.of(), List.of(), List.of(), null));
+                ctx.riskAssessment(), new ChangePatch("s", ChangePatch.Kind.CODE, "model", "b", true, true, List.of(), List.of(), "+password = hunter22", "", List.of(),
+                        List.of(), List.of(), null));
 
         assertThat(r.passed()).isFalse();
         assertThat(r.violations()).filteredOn(v -> v.ruleId().equals("POL-SECRET")).extracting(PolicyReport.Violation::location)
@@ -77,7 +80,8 @@ class PolicyAndRunnersTest {
 
     @Test
     void personalDataLogging_andProtectedPaths_areWarnings() {
-        ChangePatch protectedPatch = new ChangePatch("s", "b", true, true, List.of(), "d", "", List.of(), List.of("pom.xml"), List.of(), null);
+        ChangePatch protectedPatch = new ChangePatch("s", ChangePatch.Kind.CODE, "model", "b", true, true, List.of(), List.of(), "d", "", List.of(),
+                List.of("pom.xml"), List.of(), null);
         PolicyReport r = evaluate("Analytics must store the IP address of every visitor.", ctx.impactAnalysis(), ctx.riskAssessment(), protectedPatch);
 
         assertThat(r.violations()).anyMatch(v -> v.ruleId().equals("POL-PII") && v.severity() == PolicyReport.Severity.WARNING);
@@ -98,7 +102,7 @@ class PolicyAndRunnersTest {
 
     @Test
     void planVerification_checksTargetsInTheWorkingTree_andRunsNoProductTests() {
-        TestReport r = new PlanVerificationTestRunner().run(ctx.testPlan(), ctx.requirementSpec(), Path.of("."));
+        TestReport r = new PlanVerificationTestRunner().run(ctx.testPlan(), ctx.requirementSpec(), Path.of("."), List.of());
 
         assertThat(r.productTestsExecuted()).isFalse();
         assertThat(r.failed()).isZero();
@@ -109,7 +113,7 @@ class PolicyAndRunnersTest {
 
     @Test
     void planVerification_failsCasesWhoseTargetDoesNotExist(@TempDir Path empty) {
-        TestReport r = new PlanVerificationTestRunner().run(ctx.testPlan(), ctx.requirementSpec(), empty);
+        TestReport r = new PlanVerificationTestRunner().run(ctx.testPlan(), ctx.requirementSpec(), empty, List.of());
 
         assertThat(r.failed()).isGreaterThan(0);
         assertThat(r.results()).anyMatch(x -> x.detail().contains("target test file not found"));
@@ -124,10 +128,10 @@ class PolicyAndRunnersTest {
                 new TestPlan.TestCase("TC-2", "t", TestPlan.TestLevel.UNIT, "src/test/java/Missing.java", "s", List.of("AC-1"))));
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
 
-        TestReport pass = new CommandTestRunner(List.of(java, "-version"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir);
+        TestReport pass = new CommandTestRunner(List.of(java, "-version"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir, List.of());
         TestReport targeted = new CommandTestRunner(List.of(java, "-Dtests={tests}", "-version"), Duration.ofSeconds(60))
-                .run(plan, ctx.requirementSpec(), dir);
-        TestReport fail = new CommandTestRunner(List.of(java, "-no-such-flag"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir);
+                .run(plan, ctx.requirementSpec(), dir, List.of());
+        TestReport fail = new CommandTestRunner(List.of(java, "-no-such-flag"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir, List.of());
 
         assertThat(pass.productTestsExecuted()).isTrue();
         assertThat(pass.exitCode()).isZero();
@@ -137,6 +141,55 @@ class PolicyAndRunnersTest {
                 .satisfies(r -> assertThat(r.status()).isEqualTo(TestReport.Status.NOT_EXECUTED));
         assertThat(fail.exitCode()).isNotZero();
         assertThat(fail.failed()).isEqualTo(2);
+    }
+
+    @Test
+    void commandRunner_alsoRunsTheTestClassesThePatchAdds(@TempDir Path dir) throws Exception {
+        Files.createDirectories(dir.resolve("src/test/java/p"));
+        Files.writeString(dir.resolve("src/test/java/p/FooTest.java"), "class FooTest {}");
+        Files.writeString(dir.resolve("src/test/java/p/NewTest.java"), "class NewTest {}");
+        TestPlan plan = new TestPlan(List.of(
+                new TestPlan.TestCase("TC-1", "t", TestPlan.TestLevel.UNIT, "src/test/java/p/FooTest.java", "s", List.of("AC-1"))));
+        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+
+        TestReport r = new CommandTestRunner(List.of(java, "-Dtests={tests}", "-version"), Duration.ofSeconds(60))
+                .run(plan, ctx.requirementSpec(), dir, List.of("src/test/java/p/NewTest.java", "src/test/java/p/Gone.java"));
+
+        assertThat(r.command()).contains("-Dtests=NewTest,FooTest");
+        assertThat(r.results()).extracting(TestReport.Result::testCaseId).containsExactly("patch:NewTest", "TC-1");
+        assertThat(r.passed()).isEqualTo(2);
+    }
+
+    @Test
+    void contractGate_requiresAnExactContractForCodePatches() {
+        ChangePatch code = new ChangePatch("s", ChangePatch.Kind.CODE, "recipe:x", "b", true, true,
+                List.of(new ChangePatch.FileSummary("src/main/java/a/entity/E.java", ChangePatch.Action.MODIFIED, 1, "r"),
+                        new ChangePatch.FileSummary("src/main/java/a/dto/D.java", ChangePatch.Action.MODIFIED, 1, "r")),
+                List.of(), "d", "", List.of(), List.of(), List.of(), null);
+        InterfaceContract.ApiChange api = new InterfaceContract.ApiChange("POST", "/x", "REQUEST_FIELD_ADDED", "f");
+
+        assertThat(ImplementationAgent.contractGate(code, new InterfaceContract(InterfaceContract.Source.RECIPE, "s", List.of(api),
+                List.of(new InterfaceContract.SchemaChange("t", "c", "COLUMN_ADDED", "ALTER TABLE t ADD COLUMN c INT")))).passed()).isTrue();
+        assertThat(ImplementationAgent.contractGate(code, new InterfaceContract(InterfaceContract.Source.MODEL, "s", List.of(), List.of()))
+                .detail()).contains("no schema change", "no API change");
+        assertThat(ImplementationAgent.contractGate(code, new InterfaceContract(InterfaceContract.Source.DERIVED_PROPOSAL, "s", List.of(api),
+                List.of(new InterfaceContract.SchemaChange("t", "c", "COLUMN_ADDED", null)))).detail())
+                .contains("only a derived contract", "has no DDL");
+        assertThat(ImplementationAgent.contractGate(cleanPatch, new InterfaceContract(InterfaceContract.Source.DERIVED_PROPOSAL, "s",
+                List.of(), List.of())).passed()).isTrue();
+    }
+
+    @Test
+    void processRunner_resolvesWindowsLaunchers(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("mvn.cmd"), "");
+        Files.writeString(dir.resolve("git.exe"), "");
+        String path = dir + java.io.File.pathSeparator + "\0bad";
+
+        assertThat(ProcessRunner.resolveExecutable("mvn", path, true)).isEqualTo(dir.resolve("mvn.cmd").toString());
+        assertThat(ProcessRunner.resolveExecutable("git", path, true)).isEqualTo("git");
+        assertThat(ProcessRunner.resolveExecutable("mvn", path, false)).isEqualTo("mvn");
+        assertThat(ProcessRunner.resolveExecutable("/usr/bin/mvn", path, true)).isEqualTo("/usr/bin/mvn");
+        assertThat(ProcessRunner.resolveExecutable("nothing", path, true)).isEqualTo("nothing");
     }
 
     @Test
@@ -150,7 +203,7 @@ class PolicyAndRunnersTest {
         }
         TestPlan plan = new TestPlan(List.of(new TestPlan.TestCase("TC-1", "t", TestPlan.TestLevel.UNIT, "mvn verify", "s", List.of())));
 
-        TestReport r = new CommandTestRunner(List.of(java, sleeper.toString()), Duration.ofMillis(1500)).run(plan, ctx.requirementSpec(), dir);
+        TestReport r = new CommandTestRunner(List.of(java, sleeper.toString()), Duration.ofMillis(1500)).run(plan, ctx.requirementSpec(), dir, List.of());
 
         assertThat(r.failed()).isEqualTo(1);
         assertThat(r.results().get(0).detail()).contains("timed out");
