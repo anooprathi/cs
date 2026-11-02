@@ -77,6 +77,11 @@ public class RequirementAnalystAgent implements SdlcAgent<RequirementSpec> {
         VAGUE_TERMS.put("immediately", VAGUE_TERMS.get("real-time"));
         VAGUE_TERMS.put("robust", new String[]{"Which failure modes must be handled?",
                 "Failures surface as typed 4xx/5xx through GlobalExceptionHandler; nothing fails silently."});
+        VAGUE_TERMS.put("safer", new String[]{"Which threats should 'safer' address: malicious destinations, link enumeration, abuse, or account takeover?",
+                "Reject known-malicious destinations through the existing URL-safety check (FeignUrlSafetyChecker); no new identity model."});
+        VAGUE_TERMS.put("safe", VAGUE_TERMS.get("safer"));
+        VAGUE_TERMS.put("useful", new String[]{"Which decisions should the analytics support, and which metrics answer them?",
+                "Per-link click counts over time only, with no new personal data collected."});
         VAGUE_TERMS.put("analytics", new String[]{"Which metrics, at what granularity and retention?",
                 "Aggregate counters only, consistent with the existing analytics scope (ENGINEERING_SUMMARY.md §3)."});
     }

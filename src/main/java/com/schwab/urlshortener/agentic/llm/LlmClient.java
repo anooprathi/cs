@@ -22,4 +22,13 @@ public interface LlmClient {
      *         Never returns a partial or default object.
      */
     <T> LlmResponse<T> generate(String systemPrompt, String userPrompt, Class<T> outputType);
+
+    /**
+     * Same, with a per-call cap on output tokens (never above the client's
+     * configured maximum). Implementations that can't cap per call fall back to
+     * their configured maximum.
+     */
+    default <T> LlmResponse<T> generate(String systemPrompt, String userPrompt, Class<T> outputType, long maxOutputTokens) {
+        return generate(systemPrompt, userPrompt, outputType);
+    }
 }

@@ -211,7 +211,7 @@ public class QualityGateReviewer {
      * ignoring dangling ids (reported separately). Returns the first cycle
      * found as a closed path, e.g. [T-1, T-2, T-1].
      */
-    static Optional<List<String>> findCycle(List<PlanTask> tasks) {
+    public static Optional<List<String>> findCycle(List<PlanTask> tasks) {
         Map<String, List<String>> edges = new LinkedHashMap<>();
         for (PlanTask t : tasks) {
             if (t.id() != null) {
@@ -219,14 +219,15 @@ public class QualityGateReviewer {
             }
         }
         Map<String, Integer> state = new HashMap<>(); // absent = unvisited, 1 = on stack, 2 = done
-        for (String start : edges.keySet()) {
+        for (Map.Entry<String, List<String>> entry : edges.entrySet()) {
+            String start = entry.getKey();
             if (state.containsKey(start)) {
                 continue;
             }
             Deque<String> path = new ArrayDeque<>();
             Deque<Iterator<String>> iterators = new ArrayDeque<>();
             path.push(start);
-            iterators.push(edges.get(start).iterator());
+            iterators.push(entry.getValue().iterator());
             state.put(start, 1);
             while (!path.isEmpty()) {
                 Iterator<String> it = iterators.peek();

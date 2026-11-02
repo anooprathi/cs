@@ -62,7 +62,7 @@
       "path": "src/main/java/com/schwab/urlshortener/service/safety/FeignUrlSafetyChecker.java",
       "layer": "SERVICE",
       "responsibility": "Feature-flagged external URL-reputation check (OpenFeign); fails open on error.",
-      "keywords": ["safety", "malicious", "phishing", "malware", "deny-list", "denylist", "blocklist", "reputation", "abuse"],
+      "keywords": ["safety", "safe", "malicious", "phishing", "malware", "deny-list", "denylist", "blocklist", "reputation", "abuse"],
       "tests": ["src/test/java/com/schwab/urlshortener/service/safety/FeignUrlSafetyCheckerTest.java"]
     },
     {

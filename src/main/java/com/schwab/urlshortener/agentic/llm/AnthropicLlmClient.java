@@ -57,17 +57,24 @@ public class AnthropicLlmClient implements LlmClient {
 
     @Override
     public <T> LlmResponse<T> generate(String systemPrompt, String userPrompt, Class<T> outputType) {
-        StructuredMessageCreateParams<T> params = buildParams(systemPrompt, userPrompt, outputType);
+        return generate(systemPrompt, userPrompt, outputType, maxTokens);
+    }
+
+    @Override
+    public <T> LlmResponse<T> generate(String systemPrompt, String userPrompt, Class<T> outputType, long maxOutputTokens) {
+        long cap = Math.max(1, Math.min(maxTokens, maxOutputTokens));
+        StructuredMessageCreateParams<T> params = buildParams(systemPrompt, userPrompt, outputType, cap);
 
         StructuredMessage<T> message;
         try {
             message = client.messages().create(params);
         } catch (AnthropicServiceException e) {
-            throw new LlmException("Anthropic API returned HTTP " + e.statusCode()
-                    + " for " + outputType.getSimpleName() + " (after SDK retries)", e);
+            int status = e.statusCode();
+            throw new LlmException("Anthropic API returned HTTP " + status
+                    + " for " + outputType.getSimpleName() + " (after SDK retries)", e, status == 429 || status >= 500);
         } catch (AnthropicException e) {
             throw new LlmException("Anthropic API call failed for " + outputType.getSimpleName()
-                    + ": " + e.getClass().getSimpleName(), e);
+                    + ": " + e.getClass().getSimpleName(), e, e instanceof com.anthropic.errors.AnthropicIoException);
         }
 
         Optional<StopReason> stopReason = message.stopReason();
@@ -86,7 +93,7 @@ public class AnthropicLlmClient implements LlmClient {
         }
         if (stopReason.isPresent() && StopReason.MAX_TOKENS.equals(stopReason.get())) {
             throw new LlmException("Model output for " + outputType.getSimpleName()
-                    + " was truncated at max_tokens=" + maxTokens + "; structured output is incomplete");
+                    + " was truncated at max_tokens=" + cap + "; structured output is incomplete");
         }
 
         T output;
@@ -107,9 +114,13 @@ public class AnthropicLlmClient implements LlmClient {
 
     /** Package-private so the request shape can be asserted directly in tests without a network call. */
     <T> StructuredMessageCreateParams<T> buildParams(String systemPrompt, String userPrompt, Class<T> outputType) {
+        return buildParams(systemPrompt, userPrompt, outputType, maxTokens);
+    }
+
+    <T> StructuredMessageCreateParams<T> buildParams(String systemPrompt, String userPrompt, Class<T> outputType, long cap) {
         return MessageCreateParams.builder()
                 .model(model)
-                .maxTokens(maxTokens)
+                .maxTokens(cap)
                 .system(systemPrompt)
                 .outputConfig(outputType)
                 .addUserMessage(userPrompt)

@@ -104,6 +104,8 @@ public class SecurityConfig {
                         // the operator identity, not tenant keys. It must come before the
                         // /api/v1/** rule below, or any tenant key would be enough.
                         .requestMatchers("/api/v1/agentic/**").hasRole("ADMIN")
+                        // SDLC workflow orchestration (graph runs, approvals, promotion): same operator identity.
+                        .requestMatchers("/api/v1/workflows/**").hasRole("ADMIN")
                         // Everything else under the management API requires a tenant identity.
                         .requestMatchers("/api/v1/**").authenticated()
                         // Deliberately denyAll, not permitAll — see class Javadoc. Note for

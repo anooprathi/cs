@@ -915,3 +915,22 @@ upstream artifacts are sent to the Anthropic API.
 - **No per-operator cost budget** for LLM mode beyond the input length cap and `max-tokens`.
 - **The catalog is curated.** New components need a catalog entry before impact analysis can name them. The
   drift test only catches entries that point at missing files, not missing entries.
+
+## 13. SDLC Workflow Orchestrator
+
+A separate orchestration module (`workflow/`, `/api/v1/workflows/**`, operator `X-Admin-Key`): an explicit 7-stage dependency
+graph with parallel scheduling, gates, persistent state and resume, versioned artifacts with lineage, version-bound approvals,
+retries/fallback, git-worktree isolation, an append-only hash-chained audit log, metrics, and a timeline.
+
+```bash
+mvn clean verify
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+# three end-to-end scenarios, no credentials (reports in target/workflow-scenarios/; committed copies in docs/demo-output/)
+mvn spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments="--app.workflow.cli.scenario=all --server.port=0"
+# real LLM mode (spends API credit; NOT run in this verification)
+ANTHROPIC_API_KEY=... APP_AGENTIC_LLM_ENABLED=true mvn spring-boot:run -Dspring-boot.run.profiles=dev \
+  -Dspring-boot.run.arguments="--app.workflow.cli.scenario=greenfield --app.workflow.cli.mode=LLM --server.port=0"
+```
+
+Docs: `docs/architecture.md`, `docs/orchestration.md` (API table), `docs/governance.md`, `docs/demo-scenarios.md`,
+`docs/limitations-and-tradeoffs.md`, `SUBMISSION_NOTES.md`.
