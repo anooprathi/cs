@@ -116,11 +116,18 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 
 ## Verification (this working tree)
 
-See `README.md` §13.6 for the final numbers. In short:
-- `mvn clean verify`: all tests pass, and the JaCoCo gate is met.
-- The scenario CLI passed every check.
-- Static and security checks: `javac -Xlint:all`, SpotBugs, and a credential-pattern scan over tracked files. Results
-  are listed there. OWASP dependency-check was **not run**: it needs a multi-gigabyte NVD download.
+Run on 2026-11-01, Java 21.0.4 / Maven 3.9.9, Windows 10.
+
+| Check | Result |
+|---|---|
+| `mvn clean verify` | **394 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo 80% line gate met. BUILD SUCCESS |
+| Workflow tests (subset of the above) | 72 tests across 10 classes, all passing. `WorkspaceManagerTest` and `ScenarioEndToEndTest` use real git |
+| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 9/9, brownfield 8/8, ambiguous 7/7 evidence checks, exit 0. Reports in `docs/demo-output/` |
+| `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 27 `[serial]` (exceptions without `serialVersionUID`, same as the existing exception classes), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API), 1 annotation-processor notice |
+| SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 229 findings before fixes. Fixed 5 null-path and 2 map-iteration findings in new code; 224 remain: 213 `EI_EXPOSE_REP/REP2` (Spring/Lombok false positives), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 3 `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` (not re-triaged after the fixes), 1 format-string newline, 1 `DM_EXIT` (the CLI's exit code) |
+| Credential-pattern scan (`git grep`, tracked files, same patterns as `SecretPatterns`) | Only deliberate synthetic test fixtures. One fixture derived from a real dev key was replaced with a synthetic value |
+| OWASP dependency-check | **Not run**: it needs a multi-gigabyte NVD download |
+| Live Anthropic API | **Not run** |
 
 ## Files to inspect first
 

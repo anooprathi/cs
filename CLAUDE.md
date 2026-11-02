@@ -118,6 +118,29 @@ Java SDK with structured outputs, off unless `app.agentic.llm.enabled=true` and 
 otherwise 503, never a fallback). See `agentic/CLAUDE.md`, `README.md` §12 (including exactly what has and
 hasn't been validated against a live model), and `IMPLEMENTATION_PLAN.md`.
 
+**SDLC workflow orchestrator** (`workflow/`, `/api/v1/workflows/**`, operator `X-Admin-Key` only) is a separate
+module that runs a requirement through an explicit 7-stage dependency graph (`WorkflowDefinition.standard()`). It
+reuses the agentic agents as the generative step of four stage agents; nothing in `agentic` depends on it. Things
+to know before changing it:
+- **`WorkflowEngine` owns all state transitions; agents never persist.** A `StageAgent` declares `consumes`/`produces`,
+  gates, and a `ToolPolicy`. `AgentRequest` throws on undeclared inputs and on tools outside the policy. Bump an
+  agent's `version()` whenever its logic changes, because the version is part of the reuse fingerprint.
+- **Reuse is fingerprint-based** (`Hashes.fingerprint`). Only agents with `readsRequirement()` include the
+  requirement hash, so a requirement edit re-runs only those agents unless the spec content changes.
+- **Approvals bind to exact artifact versions** (`workflow_approval`: id + version + hash) and go STALE when the
+  task's output changes. Don't attach approval to the task.
+- **Retries are for `AgentFailures.Transient` only.** Gate, policy, approval, and tool failures must never be
+  retried. The deterministic fallback applies only in LLM mode and is always approval-gated.
+- **Audit goes through `AuditLog` only** (append-only, per-run hash chain, `SecretPatterns` redaction). Never put
+  raw requirement text or prompts in an event. `WorkflowStore.updateTask` audits every state change automatically.
+- **Workspaces never touch the source repo.** `WorkspaceManager` uses a sandbox clone plus per-run worktrees,
+  namespaced per boot because H2 run ids restart at 1. Commands run only via `ProcessRunner` (argv, no shell,
+  timeout), and only git, configured validation commands, or the configured test command.
+- Tests: `WorkflowEngineTest` (fake agents, `FakeAgents`) is the behavioral spec. `ScenarioEndToEndTest` and
+  `WorkspaceManagerTest` need git. Run all three scenarios with
+  `mvn spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.arguments="--app.workflow.cli.scenario=all --server.port=0"`.
+  Docs: `docs/orchestration.md`, `docs/governance.md`, `docs/limitations-and-tradeoffs.md`.
+
 **`GlobalExceptionHandler`** (`@RestControllerAdvice`) is the single place every error response gets mapped
 to the shared JSON envelope (`timestamp`/`status`/`error`/`message`/`path`/`details`) — internal exception
 details/stack traces never reach a client from anywhere else in the app.

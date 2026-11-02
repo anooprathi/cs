@@ -46,13 +46,13 @@ class PolicyAndRunnersTest {
 
     @Test
     void secretInRequirementOrPatch_isABlocker_andIsMasked() {
-        PolicyReport r = evaluate(AgenticFixtures.REQUIREMENT + "\nRepro: X-API-Key: usk_9MFV5byEX-ypg32y7C91EVeLEA", ctx.impactAnalysis(),
+        PolicyReport r = evaluate(AgenticFixtures.REQUIREMENT + "\nRepro: X-API-Key: usk_SYNTHETICtestKEY000000000000", ctx.impactAnalysis(),
                 ctx.riskAssessment(), new ChangePatch("s", "b", true, true, List.of(), "+password = hunter22", "", List.of(), List.of(), List.of(), null));
 
         assertThat(r.passed()).isFalse();
         assertThat(r.violations()).filteredOn(v -> v.ruleId().equals("POL-SECRET")).extracting(PolicyReport.Violation::location)
                 .contains("requirement", "change-patch");
-        assertThat(r.violations().toString()).doesNotContain("ypg32y7C91EVeLEA");
+        assertThat(r.violations().toString()).doesNotContain("testKEY000000000000");
     }
 
     @Test
