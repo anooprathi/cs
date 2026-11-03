@@ -190,6 +190,7 @@ public class WorkflowService {
             }
         });
         String requirement = request.requirement().strip();
+        rejectCredentials("requirement", request.title(), requirement);
         List<WorkflowTask> rows = new ArrayList<>();
         for (TaskNode n : definition.tasks()) {
             StageAgent agent = agents.get(n.agent());
@@ -204,6 +205,7 @@ public class WorkflowService {
                 .requirementText(requirement)
                 .requirementHash(Hashes.sha256(requirement))
                 .requirementRevision(1)
+                .plannedRequirementRevision(1)
                 .executionMode(mode)
                 .model(mode == ExecutionMode.LLM ? adapters.llmModel() : null)
                 .testExecution(testExecution)
@@ -289,6 +291,7 @@ public class WorkflowService {
             if (task.getState() != TaskState.WAITING_APPROVAL) {
                 throw new WorkflowConflictException("Task '" + taskKey + "' is " + task.getState() + "; only a WAITING_APPROVAL task can be decided.");
             }
+            requireNoPendingReplan(store.run(runId), "deciding on '" + taskKey + "'");
             Map<String, Long> refs = store.outputRefs(task);
             for (Map.Entry<String, Long> e : refs.entrySet()) {
                 WorkflowArtifact a = store.artifact(e.getValue());
@@ -344,6 +347,31 @@ public class WorkflowService {
         return result == null ? view(runId) : result;
     }
 
+    /**
+     * Refuses a human decision or promotion while the run's task states no longer reflect its current requirement
+     * and inputs (an amendment not yet re-planned, or any completed task whose fingerprint no longer matches).
+     * Without this, an approval of output produced for the OLD requirement would complete the run.
+     */
+    private void requireNoPendingReplan(WorkflowRun run, String action) {
+        List<String> reasons = engine.pendingReplanReasons(run);
+        if (!reasons.isEmpty()) {
+            throw new WorkflowConflictException("Re-planning pending, so " + action + " is refused: " + String.join("; ", reasons)
+                    + ". Resume the run to re-plan; it re-produces the affected outputs, which then need a fresh decision.");
+        }
+    }
+
+    /**
+     * Intake guard: a requirement that contains a credential is refused before it is stored, audited, or sent to any
+     * model. The message names the kind of credential, never the value.
+     */
+    static void rejectCredentials(String what, String... texts) {
+        List<String> kinds = com.schwab.urlshortener.util.SecretPatterns.kindsFound(texts);
+        if (!kinds.isEmpty()) {
+            throw new IllegalArgumentException("The " + what + " contains what looks like a " + String.join(", ", kinds)
+                    + ". Remove credentials and submit again; nothing was stored.");
+        }
+    }
+
     /** Declares a task's current output invalid. It and its dependents re-run on resume (unaffected dependents are reused). */
     public WorkflowViews.Run invalidate(Long runId, String taskKey, WorkflowRequests.Invalidate request) {
         return withClaim(runId, () -> {
@@ -370,6 +398,7 @@ public class WorkflowService {
         return withClaim(runId, () -> {
             WorkflowRun before = store.run(runId);
             String text = request.requirement().strip();
+            rejectCredentials("amended requirement", text);
             String newHash = Hashes.sha256(text);
             if (newHash.equals(before.getRequirementHash())) {
                 throw new WorkflowConflictException("The amended requirement is identical to the current one.");
@@ -417,6 +446,7 @@ public class WorkflowService {
             if (run.getStatus() != RunStatus.SUCCEEDED) {
                 throw new WorkflowConflictException("Run " + runId + " is " + run.getStatus() + "; only a SUCCEEDED run can be promoted.");
             }
+            requireNoPendingReplan(run, "promotion");
             if (run.getPromotedBranch() != null && run.getPromotionCompensatedAt() == null) {
                 throw new WorkflowConflictException("Run " + runId + " was already promoted to " + run.getPromotedBranch() + ".");
             }

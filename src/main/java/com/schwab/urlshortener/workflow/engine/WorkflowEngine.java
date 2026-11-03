@@ -228,11 +228,43 @@ public class WorkflowEngine {
                 .build());
 
         started = openWorkspace(started);
-        if (mode != DriveMode.CONTINUE) {
+        // A CONTINUE drive (after a human decision) normally skips re-validation. Never while an amendment is
+        // pending: that would let work produced for the old requirement complete the run un-re-planned.
+        boolean amendmentPending = started.getRequirementRevision() != started.getPlannedRequirementRevision();
+        if (mode != DriveMode.CONTINUE || amendmentPending) {
+            if (mode == DriveMode.CONTINUE) {
+                store.event(runId, null, null, Type.RUN_CONTINUED, "Requirement revision " + started.getRequirementRevision()
+                        + " was never planned (tasks were planned against revision " + started.getPlannedRequirementRevision()
+                        + "); re-validating before continuing.");
+            }
             prepare(started, graph);
+            int revision = started.getRequirementRevision();
+            started = store.updateRun(runId, r -> r.setPlannedRequirementRevision(revision));
         }
         schedule(started, graph);
         finish(runId, graph);
+    }
+
+    /**
+     * Why the run's current task states can't be trusted until it is re-planned, or empty if they can. Read-only:
+     * the requirement revision versus the revision the tasks were planned against, then every completed or
+     * waiting task's recorded outputs and input fingerprint against its current inputs. Human decisions and
+     * promotion are refused while this is non-empty.
+     */
+    public List<String> pendingReplanReasons(WorkflowRun run) {
+        List<String> reasons = new ArrayList<>();
+        if (run.getRequirementRevision() != run.getPlannedRequirementRevision()) {
+            reasons.add("the requirement is at revision " + run.getRequirementRevision() + " but the tasks were planned against revision "
+                    + run.getPlannedRequirementRevision());
+        }
+        Graph graph = graph(run);
+        Map<String, WorkflowTask> tasks = store.tasksByKey(run.getId());
+        for (String key : graph.order()) {
+            if (VALIDATABLE.contains(tasks.get(key).getState())) {
+                invalidReason(run, graph, tasks, key).ifPresent(why -> reasons.add(key + ": " + why));
+            }
+        }
+        return reasons;
     }
 
     private WorkflowRun openWorkspace(WorkflowRun run) {
@@ -741,6 +773,11 @@ public class WorkflowEngine {
                     });
                     return null;
                 }
+            } catch (AgentFailures.PolicyViolation e) {
+                attemptFailed(runId, key, attempt, agent, "POLICY_VIOLATION", e.getMessage());
+                compensate(runId, key, attempt, agent, request, "policy violation");
+                failTask(runId, taskId, key, attempt, "Policy violation: " + e.getMessage() + " Not retried, no fallback.");
+                return null;
             } catch (AgentFailures.ToolNotPermitted e) {
                 attemptFailed(runId, key, attempt, agent, "TOOL_NOT_PERMITTED", e.getMessage());
                 compensate(runId, key, attempt, agent, request, "tool policy violation");

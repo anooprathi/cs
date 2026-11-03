@@ -69,6 +69,12 @@ public class LlmExecutionAdapter implements ExecutionAdapter {
         if (client == null) {
             throw new AgentFailures.AgentFailure("LLM mode requested but no LLM client is configured (APP_AGENTIC_LLM_ENABLED is not true)");
         }
+        // The LLM boundary: nothing credential-shaped leaves this process, whatever upstream checks missed.
+        java.util.List<String> secrets = com.schwab.urlshortener.util.SecretPatterns.kindsFound(generation.systemPrompt(), generation.userPrompt());
+        if (!secrets.isEmpty()) {
+            throw new AgentFailures.PolicyViolation("The outgoing '" + generation.purpose() + "' prompt contains what looks like a "
+                    + String.join(", ", secrets) + "; the model call was blocked before anything was sent.");
+        }
         budget.checkAvailable(request.runId());
         long cap = Math.min(maxOutputTokensPerCall, Math.max(1, request.limits().maxOutputTokensPerCall()));
         LlmResponse<T> response;

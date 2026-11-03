@@ -1,7 +1,7 @@
 package com.schwab.urlshortener.workflow.workspace;
 
 import com.schwab.urlshortener.workflow.WorkflowProperties;
-import com.schwab.urlshortener.workflow.audit.SecretPatterns;
+import com.schwab.urlshortener.util.SecretPatterns;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;

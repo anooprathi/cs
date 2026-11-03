@@ -36,6 +36,17 @@ results for the current tree are in `SUBMISSION.md` §5.
 - **The full suite inside a workflow worktree.** `testExecution=COMMAND` runs the targeted classes, not
   `mvn verify` with its coverage gate. Run that on a promoted branch before merging.
 
+## How a test run is judged
+
+`CommandTestRunner` never trusts an exit code on its own. Before the command runs it deletes stale
+`target/surefire-reports/TEST-*.xml`. Afterwards, each targeted class needs **its own fresh report** showing at least
+one executed test and no failures or errors, plus a zero exit code. These all fail: an empty test class (Maven reports
+"Tests run: 0" and exits 0), a class whose tests are all skipped, a missing report, a stale report from an earlier
+run, failures with exit 0, and a non-zero exit with a green report. A selection that matches nothing fails the Maven
+build itself, because `-Dsurefire.failIfNoSpecifiedTests=false` is deliberately not set. Reports are parsed with
+DTDs disabled. Each of these cases has a test in `PolicyAndRunnersTest`, driven by a stand-in command that writes
+Surefire-format reports exactly as scripted.
+
 ## How the generated code is tested
 
 The demo recipes generate tests at the same layers a human would write:

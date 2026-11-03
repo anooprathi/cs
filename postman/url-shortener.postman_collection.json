@@ -4587,6 +4587,205 @@
           }
         },
         {
+          "name": "PUT Amend the Requirement while it waits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('amendment recorded as revision 2; the run is paused for re-planning', () => {",
+                  "    pm.expect(pm.response.json().requirementRevision).to.eql(2);",
+                  "    pm.expect(pm.response.json().status).to.eql('PAUSED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/requirement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "requirement"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Make links safer and analytics more useful for tenants.\",\n  \"reason\": \"Product owner reworded it.\",\n  \"actor\": \"postman-reviewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Decision on the pre-amendment spec (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('output produced for the OLD requirement cannot be decided until the run is re-planned', () => pm.response.to.have.status(409));",
+                  "pm.test('explains that re-planning is pending', () => pm.expect(pm.response.json().message).to.include('Re-planning pending'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/tasks/requirements/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "tasks",
+                "requirements",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"reviewer\": \"postman-reviewer\",\n  \"comment\": \"approving stale work on purpose\",\n  \"artifactVersions\": {\n    \"requirement-spec\": \"{{wfSpecVersion}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Resume Ambiguous Run (re-plan)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202 (re-plan the amendment)', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}/resume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}",
+                "resume"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Ambiguous Run (poll after re-plan)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Workflow runs execute asynchronously (202 on start/resume/decision). In the Collection Runner or Newman this",
+                  "// request re-runs itself every 2 s while the run is RUNNING (max 150 polls = 5 min, enough for COMMAND test runs).",
+                  "// Sent by hand, just click Send again until the status is no longer RUNNING.",
+                  "const run = pm.response.json();",
+                  "const polls = Number(pm.collectionVariables.get('wfPolls') || 0);",
+                  "if (run.status === 'RUNNING' && polls < 150) {",
+                  "    pm.collectionVariables.set('wfPolls', polls + 1);",
+                  "    const next = pm.execution && pm.execution.setNextRequest ? (n) => pm.execution.setNextRequest(n) : (n) => postman.setNextRequest(n);",
+                  "    next(pm.info.requestName);",
+                  "    setTimeout(() => {}, 2000);",
+                  "} else {",
+                  "    pm.collectionVariables.set('wfPolls', 0);",
+                  "    pm.test('run settled (no longer RUNNING)', () => pm.expect(run.status).to.not.eql('RUNNING'));",
+                  "    pm.test('re-planned and waiting for clarification again', () => pm.expect(run.status).to.eql('WAITING_APPROVAL'));",
+                  "    const label = run.tasks.find(t => t.key === 'requirements').outputs['requirement-spec'];",
+                  "    pm.test('requirements produced requirement-spec', () => pm.expect(label).to.match(/@v\\d+/));",
+                  "    pm.collectionVariables.set('wfSpecVersion', parseInt(label.split('@v')[1], 10));",
+                  "    console.log('requirement-spec version for the decision:', label);",
+                  "    pm.test('the requirement spec was re-produced for the amendment', () => pm.expect(Number(pm.collectionVariables.get('wfSpecVersion'))).to.be.above(1));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs/{{wfRun2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs",
+                "{{wfRun2Id}}"
+              ]
+            }
+          }
+        },
+        {
           "name": "POST Reject the Assumptions",
           "event": [
             {
@@ -4733,6 +4932,108 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"actor\": \"postman-reviewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Workflow Run with a credential in the requirement (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const msg = pm.response.json().message;",
+                  "pm.test('refused at intake, naming the kind of credential but never echoing it', () => {",
+                  "    pm.expect(msg).to.include('tenant API key');",
+                  "    pm.expect(msg).to.not.include('usk_SYNTHETIC');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"probe\",\n  \"requirement\": \"Tenants must log in. Repro: X-API-Key: usk_SYNTHETICprobeKEY0000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST Agentic Run with a credential in the requirement (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('the preview refuses it at intake too', () => pm.expect(pm.response.json().message).to.include('tenant API key'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Admin-Key",
+                "value": "{{adminKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agentic/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agentic",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"probe\",\n  \"requirement\": \"Tenants must log in. Repro: X-API-Key: usk_SYNTHETICprobeKEY0000000000\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

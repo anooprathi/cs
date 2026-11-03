@@ -89,6 +89,22 @@ class ExecutionAdaptersTest {
     }
 
     @Test
+    void llmAdapter_blocksACredentialInTheOutgoingPrompt_beforeTheClientIsCalled() {
+        WorkflowProperties props = props(10_000);
+        ScriptedLlm llm = new ScriptedLlm();
+        LlmExecutionAdapter adapter = new LlmExecutionAdapter(provider(llm), ledger(props), props);
+        GenerationRequest<Out> leaky = new GenerationRequest<>("requirement analysis", Out.class, "sys",
+                "Repro: X-API-Key: usk_SYNTHETICprobeKEY0000000000", () -> new Out("demo"));
+
+        assertThatThrownBy(() -> adapter.generate(leaky, request(ExecutionMode.LLM, false, ToolPolicy.of(ToolPolicy.Tool.LLM_GENERATE))))
+                .isInstanceOf(AgentFailures.PolicyViolation.class)
+                .hasMessageContaining("tenant API key")
+                .hasMessageContaining("blocked before anything was sent")
+                .hasMessageNotContaining("usk_SYNTHETIC");
+        assertThat(llm.lastCap.get()).as("the client was never called").isZero();
+    }
+
+    @Test
     void router_demoModeAndFallback_useTheDeterministicAdapter_llmModeUsesTheModel() {
         WorkflowProperties props = props(10_000);
         ScriptedLlm llm = new ScriptedLlm();

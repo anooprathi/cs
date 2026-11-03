@@ -163,6 +163,19 @@ class WorkflowApiIntegrationTest {
     }
 
     @Test
+    void credentialInTheRequirement_is400_andNothingIsStoredOrSent() throws Exception {
+        admin(post(BASE + "/runs").contentType(MediaType.APPLICATION_JSON).content(json(Map.of("title", "probe",
+                "requirement", "Tenants must log in. Repro: X-API-Key: usk_SYNTHETICprobeKEY0000000000"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("tenant API key")))
+                .andExpect(jsonPath("$.message", not(containsString("usk_SYNTHETIC"))));
+        admin(post("/api/v1/agentic/runs").contentType(MediaType.APPLICATION_JSON).content(json(Map.of("title", "probe",
+                "requirement", "Tenants must log in. Repro: X-API-Key: usk_SYNTHETICprobeKEY0000000000"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("tenant API key")));
+    }
+
+    @Test
     void validationAndModeErrors() throws Exception {
         admin(post(BASE + "/runs").contentType(MediaType.APPLICATION_JSON).content(json(Map.of("title", "t", "requirement", " "))))
                 .andExpect(status().isBadRequest());

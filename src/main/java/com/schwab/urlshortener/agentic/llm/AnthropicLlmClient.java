@@ -62,6 +62,13 @@ public class AnthropicLlmClient implements LlmClient {
 
     @Override
     public <T> LlmResponse<T> generate(String systemPrompt, String userPrompt, Class<T> outputType, long maxOutputTokens) {
+        // Last line of defense at the actual network boundary: callers check first, but nothing credential-shaped
+        // is ever sent, whichever path reached this client.
+        java.util.List<String> secrets = com.schwab.urlshortener.util.SecretPatterns.kindsFound(systemPrompt, userPrompt);
+        if (!secrets.isEmpty()) {
+            throw new LlmException("Request blocked before sending: the prompt contains what looks like a " + String.join(", ", secrets)
+                    + ".", null, false);
+        }
         long cap = Math.max(1, Math.min(maxTokens, maxOutputTokens));
         StructuredMessageCreateParams<T> params = buildParams(systemPrompt, userPrompt, outputType, cap);
 

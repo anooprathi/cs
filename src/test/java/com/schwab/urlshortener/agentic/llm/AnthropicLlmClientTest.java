@@ -49,6 +49,15 @@ class AnthropicLlmClientTest {
     }
 
     @Test
+    void credentialInThePrompt_isBlockedBeforeTheSdkIsCalled() {
+        assertThatThrownBy(() -> llm.generate("sys", "key usk_SYNTHETICprobeKEY0000000000", RiskAssessment.class))
+                .isInstanceOf(LlmException.class)
+                .hasMessageContaining("blocked before sending")
+                .hasMessageNotContaining("usk_SYNTHETIC");
+        org.mockito.Mockito.verifyNoInteractions(messages);
+    }
+
+    @Test
     void buildParams_setsModelMaxTokensSystemUserAndStructuredOutputSchema() {
         StructuredMessageCreateParams<RiskAssessment> params = llm.buildParams("SYS", "USER", RiskAssessment.class);
         MessageCreateParams raw = params.rawParams();

@@ -55,6 +55,13 @@ public class WorkflowRun {
     /** Bumped on every requirement amendment, so audit events can say which revision a task saw. */
     private int requirementRevision;
 
+    /**
+     * The requirement revision the tasks were last validated (re-planned) against. Set when a START or RESUME drive
+     * prepares the run. While it lags {@link #requirementRevision}, re-planning is pending: decisions and
+     * promotion are refused, and any drive re-validates first.
+     */
+    private int plannedRequirementRevision;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ExecutionMode executionMode;

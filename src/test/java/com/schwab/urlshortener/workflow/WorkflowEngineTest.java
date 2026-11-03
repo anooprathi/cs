@@ -16,6 +16,7 @@ import com.schwab.urlshortener.workflow.engine.WorkflowEngine;
 import com.schwab.urlshortener.workflow.engine.WorkflowStore;
 import com.schwab.urlshortener.workflow.metrics.WorkflowMetricsService;
 import com.schwab.urlshortener.workflow.persistence.WorkflowEvent;
+import com.schwab.urlshortener.workflow.persistence.WorkflowTask;
 import com.schwab.urlshortener.workflow.persistence.WorkflowEvent.Type;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -372,6 +373,92 @@ class WorkflowEngineTest {
         WorkflowEvent approved = store.history(id).stream().filter(e -> e.getType() == Type.APPROVED).findFirst().orElseThrow();
         assertThat(approved.getActor()).isEqualTo("lead");
         assertThat(approved.getDetailsJson()).contains("decidedAt").contains("joined@v1");
+    }
+
+    /** Regression: amending while a checkpoint waits must not let the old output be approved and the run complete un-re-planned. */
+    @Test
+    void amendmentWhileWaitingForApproval_blocksTheDecisionUntilTheRunIsReplanned() {
+        Long id = service.start(create(true).id()).id();
+        assertThat(service.view(id).status()).isEqualTo(RunStatus.WAITING_APPROVAL);
+        service.amendRequirement(id, new WorkflowRequests.AmendRequirement("Tenants must get a joined result, amended.",
+                "scope change", "product-owner"));
+
+        assertThatThrownBy(() -> service.decide(id, "join", new WorkflowRequests.Decision(
+                WorkflowRequests.Decision.Verdict.APPROVED, "lead", "ok", Map.of("joined", 1))))
+                .isInstanceOf(WorkflowConflictException.class)
+                .hasMessageContaining("Re-planning pending")
+                .hasMessageContaining("revision 2");
+        assertThat(service.view(id).approvals()).isEmpty();
+        assertThat(task(service.view(id), "join").state()).isEqualTo(TaskState.WAITING_APPROVAL);
+
+        WorkflowViews.Run replanned = service.resume(id);
+        assertThat(SCRIPT.count("fake-root")).as("the requirement reader re-ran").isEqualTo(2);
+        assertThat(replanned.status()).isEqualTo(RunStatus.WAITING_APPROVAL);
+
+        String label = task(replanned, "join").outputs().get("joined");
+        int version = Integer.parseInt(label.substring(label.indexOf("@v") + 2, label.indexOf('#')));
+        WorkflowViews.Run run = service.decide(id, "join", new WorkflowRequests.Decision(
+                WorkflowRequests.Decision.Verdict.APPROVED, "lead", "ok after re-plan", Map.of("joined", version)));
+        assertThat(run.status()).isEqualTo(RunStatus.SUCCEEDED);
+        assertThat(run.approvals()).singleElement().satisfies(a -> assertThat(a.artifact()).startsWith("joined@v" + version));
+    }
+
+    @Test
+    void decisionRefused_whenAnyCompletedTasksInputsNoLongerMatchItsFingerprint() {
+        Long id = service.start(create(true).id()).id();
+        // Simulate an upstream change the run hasn't re-validated yet: root's accepted output is invalidated in place.
+        WorkflowTask root = store.task(id, "root");
+        store.updateArtifacts(List.copyOf(store.outputRefs(root).values()), a -> a.setInvalidated(true));
+
+        assertThatThrownBy(() -> service.decide(id, "join", new WorkflowRequests.Decision(
+                WorkflowRequests.Decision.Verdict.APPROVED, "lead", "ok", Map.of("joined", 1))))
+                .isInstanceOf(WorkflowConflictException.class)
+                .hasMessageContaining("Re-planning pending")
+                .hasMessageContaining("root");
+    }
+
+    @Test
+    void continueDrive_afterAnAmendment_replansInsteadOfSkippingValidation() {
+        Long id = service.start(create(true).id()).id();
+        service.amendRequirement(id, new WorkflowRequests.AmendRequirement("Tenants must get a joined result, amended.",
+                "scope change", "product-owner"));
+
+        engine.drive(id, WorkflowEngine.DriveMode.CONTINUE);
+
+        assertThat(SCRIPT.count("fake-root")).as("a CONTINUE drive must not bypass re-planning").isEqualTo(2);
+        assertThat(store.run(id).getPlannedRequirementRevision()).isEqualTo(2);
+    }
+
+    @Test
+    void credentialInARequirement_isRefusedAtIntake_andAtAmendment_andNothingIsStored() {
+        int before = store.runs(org.springframework.data.domain.PageRequest.of(0, 1000)).getContent().size();
+        assertThatThrownBy(() -> service.create(new WorkflowRequests.CreateRun("leaky", "Tenants must log in. Repro key: usk_SYNTHETICprobeKEY0000000000",
+                ExecutionMode.DETERMINISTIC_DEMO, FakeAgents.diamond(false), null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tenant API key")
+                .hasMessageNotContaining("usk_SYNTHETIC");
+        assertThat(store.runs(org.springframework.data.domain.PageRequest.of(0, 1000)).getContent()).hasSize(before);
+
+        Long id = service.start(create(false).id()).id();
+        assertThatThrownBy(() -> service.amendRequirement(id, new WorkflowRequests.AmendRequirement(
+                "Tenants must get a joined result. Key: usk_SYNTHETICprobeKEY0000000000", "add repro", "operator")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("tenant API key");
+        assertThat(store.run(id).getRequirementRevision()).isEqualTo(1);
+    }
+
+    @Test
+    void policyViolation_failsTheTask_withoutRetryOrFallback_evenInLlmMode() {
+        SCRIPT.behavior.put("left", req -> {
+            throw new AgentFailures.PolicyViolation("outgoing prompt contains what looks like a tenant API key");
+        });
+
+        WorkflowViews.Run run = service.start(create(false, ExecutionMode.LLM).id());
+
+        assertThat(task(run, "left").state()).isEqualTo(TaskState.FAILED);
+        assertThat(task(run, "left").attempts()).isEqualTo(1);
+        assertThat(task(run, "left").fallbackUsed()).isFalse();
+        assertThat(task(run, "left").error()).contains("Policy violation").contains("no fallback");
+        assertThat(store.history(run.id()).stream().map(WorkflowEvent::getType)).doesNotContain(Type.TASK_RETRY_SCHEDULED, Type.TASK_FALLBACK);
     }
 
     @Test

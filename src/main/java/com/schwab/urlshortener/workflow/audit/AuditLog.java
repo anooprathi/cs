@@ -2,6 +2,7 @@ package com.schwab.urlshortener.workflow.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.schwab.urlshortener.util.SecretPatterns;
 import com.schwab.urlshortener.workflow.engine.Hashes;
 import com.schwab.urlshortener.workflow.persistence.WorkflowEvent;
 import com.schwab.urlshortener.workflow.persistence.WorkflowEventRepository;

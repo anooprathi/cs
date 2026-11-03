@@ -248,8 +248,12 @@ public class WorkflowReports {
                 sb.append(", command `").append(cells.cell(tests.command())).append("` exit ").append(tests.exitCode());
             }
             sb.append(".\n");
-            junitTotals(tests.outputTail()).ifPresent(t -> sb.append("- **JUnit totals reported by the command:** `").append(cells.cell(t))
-                    .append("`\n"));
+            if (tests.junit() != null) {
+                TestReport.JUnitTotals j = tests.junit();
+                sb.append("- **JUnit (from the fresh Surefire reports):** ").append(j.tests()).append(" tests in ").append(j.classes().size())
+                        .append(" classes, ").append(j.failures()).append(" failures, ").append(j.errors()).append(" errors, ")
+                        .append(j.skipped()).append(" skipped\n");
+            }
         }
         if (contract != null) {
             sb.append("- **Interface contract (").append(contract.source()).append("):** ");
@@ -269,20 +273,6 @@ public class WorkflowReports {
         }
         List<String> lines = text.strip().lines().toList();
         return lines.get(lines.size() - 1).strip();
-    }
-
-    /** The last Maven Surefire "Tests run: n, Failures: n, ..." totals line in the command output, if any. */
-    static java.util.Optional<String> junitTotals(String output) {
-        if (output == null) {
-            return java.util.Optional.empty();
-        }
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Tests run: \\d+, Failures: \\d+, Errors: \\d+, Skipped: \\d+(?=\\s*$)",
-                java.util.regex.Pattern.MULTILINE).matcher(output);
-        String last = null;
-        while (m.find()) {
-            last = m.group();
-        }
-        return java.util.Optional.ofNullable(last);
     }
 
     private void planSection(StringBuilder sb, ImplementationPlan plan, List<Map<String, Object>> results) {

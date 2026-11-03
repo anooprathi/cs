@@ -87,6 +87,7 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 | Codebase reasoning: impacted modules, APIs, data flows | `ImpactAnalysis.dataFlows` (entry point → service → persistence, derived from catalog layers in demo mode), quality-gate rule `impact.data-flow-component-known`, workflow gate DES-EXIT-4 | every run's `architecture-design` artifact | `DeterministicAgentsTest#impact_dataFlows_…`, `QualityGateReviewerTest#dataFlowThroughAnUnknownComponent_isBlocker` |
 | Testing approach | `docs/testing-approach.md` | n/a | n/a |
 | Tests executed against the patched worktree | `TestExecution` (per run), `CommandTestRunner` (+ the patch's own test classes), `ProcessRunner` (Windows `.cmd` resolution) | `"testExecution":"COMMAND"` | `PolicyAndRunnersTest#commandRunner_alsoRunsTheTestClassesThePatchAdds`, `ScenarioEndToEndTest` (real nested `mvn test`) |
+| Test verdicts from evidence, not exit codes | `CommandTestRunner` reads fresh Surefire XML per targeted class (stale reports deleted first); `TestReport.junit` totals; no `failIfNoSpecifiedTests=false` | any COMMAND run | `PolicyAndRunnersTest#commandRunner_emptyTestClass_withExitCodeZero_isAFailure…` and 7 more runner cases |
 | API / schema definition artifact | `artifact/InterfaceContract` (`interface-contract`), gate IMP-EXIT-7 | greenfield (3 API changes + DDL) | `PolicyAndRunnersTest#contractGate_…`; scenario check "Interface contract declares …" |
 | Human approval before merging/deploying | `WorkflowService.promote` (valid approval + bound patch + confirm) | greenfield promotion | `WorkspaceManagerTest#promote_…`, `WorkflowApiIntegrationTest` (promotion refused without workspace) |
 
@@ -97,6 +98,7 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 | Approval checkpoints for high-impact actions | graph/policy/clarification/protected-path/fallback checkpoints; promotion | ambiguous, greenfield | `WorkflowEngineTest#approval_…`, `#llmFailure_takesTheDefinedFallback_…` |
 | Approvals bound to exact artifact version | `WorkflowApproval` (id+version+hash); stale-view 409 | decision API | `WorkflowEngineTest#approval_isBoundToTheExactVersion_…` |
 | Approval invalidated when the artifact changes | `WorkflowStore.staleApprovals` | ambiguous (STALE rejection) | `WorkflowEngineTest#approvalGoesStale_…`, `#approvalSurvivesReplanning_…` |
+| No approval or promotion of un-re-planned work | `WorkflowRun.plannedRequirementRevision`, `WorkflowEngine.pendingReplanReasons`, `WorkflowService.requireNoPendingReplan` (decide and promote), CONTINUE drives re-validate after an amendment | amend while waiting, then decide → 409 | `WorkflowEngineTest#amendmentWhileWaitingForApproval_…`, `#decisionRefused_whenAny…Fingerprint`, `#continueDrive_afterAnAmendment_…` |
 | Configurable security and change-control policies | `app.workflow.policy.*`, `PolicyEngine`, `ChangeControlPolicy` | brownfield POL-SCOPE | `PolicyAndRunnersTest` (6 policy tests), `ChangeControlPolicyTest` |
 | Bounded retries with backoff for transient failures | `WorkflowEngine.attemptWithRecovery`, `Retry.backoffBefore` | greenfield injected fault | `WorkflowEngineTest#transientFailures_…`, `#retryExhaustion_…` |
 | No automatic retry for policy violations or missing approvals | failure taxonomy (`AgentFailures`) | brownfield, ambiguous | `#entryGateFailure_…` (no retry), `#rejection_…`, scenario check "Policy violation was NOT retried" |
@@ -113,6 +115,7 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 |---|---|---|---|
 | Durable audit with run/task/agent ids, versions, transitions, decisions, validation, approval identity and time, retry/fallback/rollback/safe-stop, mode/model | `audit/AuditLog`, `WorkflowEvent` (sequence, agentId, from/to, actor, refs, details) | `GET /runs/{id}/history` | `WorkflowEngineTest#auditLog_redactsSecrets_andEveryTaskTransitionIsRecorded`, `#approval_…` (actor and decidedAt) |
 | No secrets or sensitive prompts in logs | `SecretPatterns.redact` on every event and log line; hashes instead of requirement text | n/a | `PolicyAndRunnersTest#redaction_…`, `WorkflowEngineTest#auditLog_redacts…` |
+| Credentials never reach the LLM | Intake 400 in both APIs (`WorkflowService.rejectCredentials`, `SdlcRunService.start`), `REQ-ENTRY-3`, outgoing-prompt scan in `LlmExecutionAdapter` (`PolicyViolation`: no retry, no fallback), `SdlcOrchestrator`, and `AnthropicLlmClient` | POST a requirement containing a key → 400 | `WorkflowApiIntegrationTest#credentialInTheRequirement_is400…`, `ExecutionAdaptersTest`, `SdlcOrchestratorTest`, `AnthropicLlmClientTest`, `WorkflowEngineTest#credentialInARequirement_…`, `#policyViolation_…` |
 | Append-only interface + integrity limitations | `WorkflowEventRepository` (no update/delete), `@PreUpdate`, per-run SHA-256 chain, `/audit/verify` | `GET /runs/{id}/audit/verify` | `WorkflowEngineTest#auditChain_isIntact_andDetectsTampering`; limits in `docs/governance.md` §6 |
 | Metrics with precise definitions | `metrics/WorkflowMetricsService` (+ Micrometer counters) | `GET /api/v1/workflows/metrics` | `WorkflowMetricsServiceTest` (5 tests pin each definition) |
 | Readable execution timeline | `WorkflowReports.timeline` (span chart + event table) | `GET /runs/{id}/timeline` | `WorkflowApiIntegrationTest`, `docs/demo-output/*.md` |
@@ -128,17 +131,17 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 
 ## Verification (this working tree)
 
-Run on 2026-11-02, Java 21.0.4 / Maven 3.9.9, Windows 10, after the review pass (`ENGINEERING_SUMMARY.md` §18).
-Every row below was re-run on that tree.
+Run on 2026-11-03, Java 21.0.4 / Maven 3.9.9, Windows 10, on the final tree (after the review pass and the fixes for the
+three external-review findings, `ENGINEERING_SUMMARY.md` §18). Every row below was re-run on that tree.
 
 | Check | Result |
 |---|---|
-| `mvn clean verify` | **409 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.4% (workflow packages 91.7%), clearing the 80% gate. BUILD SUCCESS |
-| Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree, including the generated unit and integration tests. Maven reported 113 and 83 tests, 0 failures |
-| Postman / Newman | 106-request collection, including folders `8. Agentic SDLC` and `9. Workflow Orchestrator`, against a freshly started dev instance: 180 assertions, 0 failures |
+| `mvn clean verify` | **424 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.5% (workflow packages 91.9%), clearing the 80% gate. BUILD SUCCESS |
+| Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree, judged from the fresh Surefire XML: 113 and 83 executed tests, 0 failures |
+| Postman / Newman | 112-request collection (folders 8 and 9 include API-level probes for the re-planning and credential findings) against a freshly started dev instance: 193 assertions, 0 failures |
 | Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 11/11, brownfield 10/10, ambiguous 7/7 evidence checks, exit 0. Reports (now with Validation and Limitations sections and data flows) in `docs/demo-output/` |
-| `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 28 `[serial]` (exceptions without `serialVersionUID`, consistent with every existing exception class), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API) |
-| SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 226 findings, none actionable: 218 `EI_EXPOSE_REP/REP2` (records and Lombok/Spring beans exposing collections, a known false-positive category), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 1 `VA_FORMAT_STRING_USES_NEWLINE` (deliberate: Markdown must be `\n`, `%n` would emit CRLF on Windows), 1 `DM_EXIT` (the scenario CLI's exit code). The 3 null-path findings left untriaged by the previous pass were false positives and are now cleared by explicit null checks |
+| `javac -Xlint:all` (all main sources) | 0 errors. 32 warnings: 29 `[serial]` (exceptions without `serialVersionUID`, consistent with every existing exception class), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API) |
+| SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 228 findings, none actionable: 220 `EI_EXPOSE_REP/REP2` (records and Lombok/Spring beans exposing collections, a known false-positive category), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 1 `VA_FORMAT_STRING_USES_NEWLINE` (deliberate: Markdown must be `\n`), 1 `DM_EXIT` (the scenario CLI's exit code). Two findings in the new report parser (`DE_MIGHT_IGNORE`, `REC_CATCH_EXCEPTION`) were fixed: it now catches only parse failures and lists unreadable reports in the test report |
 | Credential-pattern scan (`git grep`, tracked files including Markdown, same patterns as `SecretPatterns`) | Only deliberate synthetic fixtures in redaction tests. No real key in any tracked file or demo output |
 | OWASP dependency-check | **Not run**: it needs a multi-gigabyte NVD download |
 | Live Anthropic API | **Not run** |

@@ -103,6 +103,18 @@ class SdlcOrchestratorTest {
     }
 
     @Test
+    void llmMode_credentialInTheRequirement_isNeverSentToTheModel() {
+        ScriptedLlmClient llm = new ScriptedLlmClient();
+
+        orchestrator(llm, ExecutionMode.LLM).execute("t", AgenticFixtures.REQUIREMENT + "\nRepro key: usk_SYNTHETICprobeKEY0000000000", ExecutionMode.LLM);
+
+        assertThat(llm.userPrompts).as("nothing reached the model").isEmpty();
+        assertThat(savedArtifacts.get(0).getStatus()).isEqualTo(SdlcArtifact.Status.FAILED);
+        assertThat(savedArtifacts.get(0).getErrorMessage()).contains("Blocked before sending").contains("tenant API key")
+                .doesNotContain("usk_SYNTHETIC");
+    }
+
+    @Test
     void demoRun_producesSixArtifactsInOrder_stampedDeterministic_andAwaitsReview() {
         SdlcRun run = orchestrator(null, ExecutionMode.DETERMINISTIC_DEMO).execute(AgenticFixtures.TITLE, AgenticFixtures.REQUIREMENT, null);
 

@@ -49,6 +49,16 @@ public final class AgentFailures {
     }
 
     /** The agent tried to use a tool outside its policy. Treated as a bug, never retried or worked around. */
+    /**
+     * A policy guard refused the action, e.g. an outgoing LLM prompt contains a credential. It is never retried and
+     * never routed to the deterministic fallback: the input itself is unacceptable, not the attempt.
+     */
+    public static class PolicyViolation extends IllegalStateException {
+        public PolicyViolation(String message) {
+            super(message);
+        }
+    }
+
     public static class ToolNotPermitted extends IllegalStateException {
         public ToolNotPermitted(String agent, ToolPolicy.Tool tool) {
             super("Agent '" + agent + "' is not permitted to use tool " + tool);

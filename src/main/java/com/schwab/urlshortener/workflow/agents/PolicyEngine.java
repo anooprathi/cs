@@ -11,7 +11,7 @@ import com.schwab.urlshortener.workflow.WorkflowProperties;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport.Severity;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport.Violation;
-import com.schwab.urlshortener.workflow.audit.SecretPatterns;
+import com.schwab.urlshortener.util.SecretPatterns;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import org.springframework.stereotype.Component;
 

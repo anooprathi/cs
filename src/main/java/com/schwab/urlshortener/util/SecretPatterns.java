@@ -1,4 +1,4 @@
-package com.schwab.urlshortener.workflow.audit;
+package com.schwab.urlshortener.util;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -6,8 +6,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Credential-shaped patterns, shared by the policy engine (POL-SECRET detection)
- * and the audit log (redaction before anything is persisted or logged).
+ * Credential-shaped patterns, shared by:
+ * <ul>
+ *   <li>request intake: a requirement containing one is rejected before it is stored;</li>
+ *   <li>the LLM boundary: an outgoing prompt containing one is blocked before it is sent;</li>
+ *   <li>the policy engine (POL-SECRET detection in patches and artifacts);</li>
+ *   <li>the audit log (redaction before anything is persisted or logged).</li>
+ * </ul>
  * Pattern-based redaction is best-effort: it catches the formats listed here,
  * not every possible secret. See docs/governance.md.
  */
@@ -42,6 +47,21 @@ public final class SecretPatterns {
             }
         }
         return out;
+    }
+
+    /** The kinds of credential found in the given texts: names only, never the matched values. Sorted, null-safe. */
+    public static java.util.List<String> kindsFound(String... texts) {
+        java.util.TreeSet<String> kinds = new java.util.TreeSet<>();
+        for (String text : texts) {
+            if (text != null) {
+                PATTERNS.forEach((kind, pattern) -> {
+                    if (pattern.matcher(text).find()) {
+                        kinds.add(kind);
+                    }
+                });
+            }
+        }
+        return java.util.List.copyOf(kinds);
     }
 
     public static boolean containsSecret(String text) {

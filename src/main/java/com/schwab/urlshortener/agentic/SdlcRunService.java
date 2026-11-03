@@ -79,6 +79,12 @@ public class SdlcRunService {
     }
 
     public SdlcRunResponse start(CreateSdlcRunRequest request) {
+        // Intake guard: a credential in the requirement is refused before it is stored or sent to a model.
+        java.util.List<String> secrets = com.schwab.urlshortener.util.SecretPatterns.kindsFound(request.title(), request.requirement());
+        if (!secrets.isEmpty()) {
+            throw new IllegalArgumentException("The requirement contains what looks like a " + String.join(", ", secrets)
+                    + ". Remove credentials and submit again; nothing was stored.");
+        }
         SdlcRun run = orchestrator.execute(request.title().strip(), request.requirement().strip(), request.mode());
         return toResponse(run);
     }

@@ -22,9 +22,9 @@ Run **3**, mode **DETERMINISTIC_DEMO**, final status **SUCCEEDED**. Approvals in
 |---|---|---|
 | Ambiguities identified with proposed assumptions | PASS | 5 ambiguities, each with an assumption |
 | Execution held until resolution: design never ran before the clarification was approved | PASS | from audit order |
-| Rejected approval went STALE when the requirement-spec changed | PASS | #3 requirements REJECTED requirement-spec@v1#b84e204d2fc3 STALE; #4 requirements APPROVED requirement-spec@v2#68f3992cf83f VALID; #5 release APPROVED readiness-report@v1#ad32f93d588f VALID |
+| Rejected approval went STALE when the requirement-spec changed | PASS | #3 requirements REJECTED requirement-spec@v1#b84e204d2fc3 STALE; #4 requirements APPROVED requirement-spec@v2#68f3992cf83f VALID; #5 release APPROVED readiness-report@v1#04a7f1d3b329 VALID |
 | Clarified requirement produced a more specific spec | PASS | 1 -> 3 acceptance criteria |
-| Run completed only after human decisions | PASS | #3 requirements REJECTED requirement-spec@v1#b84e204d2fc3 STALE; #4 requirements APPROVED requirement-spec@v2#68f3992cf83f VALID; #5 release APPROVED readiness-report@v1#ad32f93d588f VALID |
+| Run completed only after human decisions | PASS | #3 requirements REJECTED requirement-spec@v1#b84e204d2fc3 STALE; #4 requirements APPROVED requirement-spec@v2#68f3992cf83f VALID; #5 release APPROVED readiness-report@v1#04a7f1d3b329 VALID |
 | Parallel execution observed | PASS | max running at once 3 |
 | Audit hash chain intact | PASS | 145 events verified: chain intact |
 
@@ -41,10 +41,10 @@ Run **3**, mode **DETERMINISTIC_DEMO**, final status **SUCCEEDED**. Approvals in
 | Graph layers (parallel groups) | [[requirements], [design], [implementation], [tests, security, docs], [release]] |
 | Max tasks running at once | 3 |
 | Agent attempts / automatic retries | 8 / 0 |
-| Recovered failures (MTTR) | 1 (mean 432 ms) |
+| Recovered failures (MTTR) | 1 (mean 420 ms) |
 | Workspace rollbacks | 0 |
 | Injected demo faults | none |
-| Base commit / workspace | 189b6c48be70 / C:\Users\rathi\AppData\Local\Temp\url-shortener-workflows\instance-20261102-223548-dc210615\run-3 |
+| Base commit / workspace | 8a467ee14847 / C:\Users\rathi\AppData\Local\Temp\url-shortener-workflows\instance-20261103-000446-e4e4f793\run-3 |
 | Promotion | not promoted |
 
 ### What was built
@@ -77,7 +77,7 @@ Key decisions (as recorded by each stage's agent):
 - `design`: Impacted: UrlMapping (MODIFY), UrlShortenerServiceImpl (MODIFY), FeignUrlSafetyChecker (MODIFY), GlobalExceptionHandler (EXTEND), UrlShortenerController (EXTEND), UrlDtos (EXTEND), SecurityConfig (MODIFY). _Why:_ Matched against the curated component catalog of this repository.
 - `design`: Produced by deterministic-demo. _Why:_ Execution mode of the run.
 - `implementation`: Patch scoped to 1 file(s). _Why:_ Change control limits patches to [docs/**, src/main/java/**, src/test/java/**, README.md].
-- `implementation`: Applied in an isolated worktree at base 189b6c48be. _Why:_ The source repository is never written; workspace state is derived from this patch's diff.
+- `implementation`: Applied in an isolated worktree at base 8a467ee148. _Why:_ The source repository is never written; workspace state is derived from this patch's diff.
 - `implementation`: Plan by deterministic-demo; patch by deterministic-demo (change-record). _Why:_ No deterministic code recipe matches this requirement, so demo mode writes a change record.
 - `docs`: Deterministic documentation assembly. _Why:_ Documentation projects reviewed artifacts; generating it with a model would add unreviewed content.
 - `security`: Evaluated rules [POL-SECRET, POL-SCOPE, POL-AUTHZ, POL-PROTECTED, POL-TENANT, POL-PII]. _Why:_ Rules are configured in app.workflow.policy.* and are deterministic in every mode.
@@ -161,19 +161,19 @@ Stated by agents:
 |---|---|---|---:|---:|---|---|---|
 | requirements | REQUIREMENT_ANALYSIS | SUCCEEDED | 2 | 0 |  |  | requirement-spec@v2#68f3992cf83f |
 | design | ARCHITECTURE_DESIGN | SUCCEEDED | 1 | 0 |  |  | architecture-design@v1#e0529c58efb5 |
-| implementation | IMPLEMENTATION | SUCCEEDED | 1 | 0 |  |  | implementation-plan@v1#5c4cc48727d6, change-patch@v1#ca3477285e76, interface-contract@v1#3026af4962d4 |
-| tests | TEST_GENERATION_AND_EXECUTION | SUCCEEDED | 1 | 0 |  |  | test-plan@v1#9e0792375ea9, test-report@v1#9f0471244d1f |
+| implementation | IMPLEMENTATION | SUCCEEDED | 1 | 0 |  |  | implementation-plan@v1#5c4cc48727d6, change-patch@v1#ce3c16a312c2, interface-contract@v1#3026af4962d4 |
+| tests | TEST_GENERATION_AND_EXECUTION | SUCCEEDED | 1 | 0 |  |  | test-plan@v1#9e0792375ea9, test-report@v1#bc171ae8a8b2 |
 | security | SECURITY_POLICY_VALIDATION | SUCCEEDED | 1 | 0 |  |  | risk-assessment@v1#0c4d20156dc3, policy-report@v1#663d62ee1f4b |
 | docs | DOCUMENTATION | SUCCEEDED | 1 | 0 |  |  | documentation@v1#7c868aa047f4 |
-| release | RELEASE_READINESS | SUCCEEDED | 1 | 0 |  |  | readiness-report@v1#ad32f93d588f |
+| release | RELEASE_READINESS | SUCCEEDED | 1 | 0 |  |  | readiness-report@v1#04a7f1d3b329 |
 
 ### Human decisions
 
 | # | Task | Bound to | Decision | Reviewer | At | Status |
 |---:|---|---|---|---|---|---|
-| 3 | requirements | requirement-spec@v1#b84e204d2fc3 | REJECTED | scenario-reviewer (scripted) | 2026-11-03T04:39:01.991634Z | STALE (superseded: requirements produced new output requirement-spec#37) |
-| 4 | requirements | requirement-spec@v2#68f3992cf83f | APPROVED | scenario-reviewer (scripted) | 2026-11-03T04:39:02.417953Z | VALID |
-| 5 | release | readiness-report@v1#ad32f93d588f | APPROVED | scenario-reviewer (scripted) | 2026-11-03T04:39:05.799376Z | VALID |
+| 3 | requirements | requirement-spec@v1#b84e204d2fc3 | REJECTED | scenario-reviewer (scripted) | 2026-11-03T06:07:40.936054Z | STALE (superseded: requirements produced new output requirement-spec#37) |
+| 4 | requirements | requirement-spec@v2#68f3992cf83f | APPROVED | scenario-reviewer (scripted) | 2026-11-03T06:07:41.356657Z | VALID |
+| 5 | release | readiness-report@v1#04a7f1d3b329 | APPROVED | scenario-reviewer (scripted) | 2026-11-03T06:07:43.533279Z | VALID |
 
 ### Notable events
 
@@ -196,155 +196,155 @@ Stated by agents:
 Status **SUCCEEDED**, requirement revision 2, 5 drive(s), 145 audit events. Max tasks RUNNING at once: **3**.
 
 ```
-task            |------------------------------------------------| 0 .. 5675 ms
-requirements    |            ██◆ ██◆                             |
-design          |                   ███                          |
-implementation  |                     ███████████████████        |
+task            |------------------------------------------------| 0 .. 3709 ms
+requirements    |          ███◆ ███◆                             |
+design          |                   ████                         |
+implementation  |                      ██████████████████        |
 tests           |                                       ████████ |
-security        |                                       ███      |
-docs            |                                       █        |
-release         |                                              █◆|
+security        |                                       ████     |
+docs            |                                       ██       |
+release         |                                              ◆ |
 ```
 _█ = RUNNING (executing an attempt), ◆ = paused for human approval._
 
 | +ms | # | task | event | transition | actor | detail |
 |---:|---:|---|---|---|---|---|
-| 5 | 1 |  | RUN_CREATED |  | api | Run created: 'Ambiguous: safer links, more useful analytics' (DETERMINISTIC_DEMO, 7 tasks). |
-| 14 | 2 |  | RUN_STARTED |  | engine | Drive #1 (START), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 1464 | 3 |  | WORKSPACE_CREATED |  | engine | Isolated worktree run-3 created at base commit 189b6c48be70 in the orchestrator's sandbox clone; the source repository is not modified. |
-| 1478 | 5 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
-| 1484 | 6 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 1486 | 7 | requirements | TASK_STARTED |  | engine | Fingerprint 626b4e28bbb7; inputs []. |
-| 1491 | 8 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
-| 1497 | 9 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 1687 | 10 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v1 (DETERMINISTIC_DEMO) produced from []. |
-| 1694 | 11 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 1 functional and 0 non-functional statements with 1 acceptance criteria. |
-| 1702 | 12 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
-| 1717 | 13 | requirements | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
-| 1728 | 14 | requirements | APPROVAL_REQUESTED |  | engine | Human approval required: 5 ambiguities need clarification (AMB-1, AMB-2, AMB-3, AMB-4, AMB-5). Approve the proposed assumptions, or reject with a clarification and amend the requirement. |
-| 1759 | 15 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [requirements]. |
-| 1766 | 16 |  | RUN_DRIVE_ENDED |  | engine | Drive START ended with run WAITING_APPROVAL after 1753 ms. |
-| 1851 | 17 | requirements | REJECTED |  | scenario-reviewer (scripted) | Rejected by scenario-reviewer (scripted): Too vague to build. 'Safer' means rejecting malicious destinations; 'more useful' means daily click counts. See amended requirement. |
-| 1857 | 18 | requirements | TASK_TRANSITION | WAITING_APPROVAL → FAILED | scenario-reviewer (scripted) | Rejected by scenario-reviewer (scripted): Too vague to build. 'Safer' means rejecting malicious destinations; 'more useful' means daily click counts. See amended requirement. (not retried automatically; amend the requ... |
-| 1861 | 19 |  | RUN_CONTINUED |  | engine | Drive #2 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 1864 | 20 | design | TASK_SKIPPED |  | engine | Upstream 'requirements' is FAILED. |
-| 1867 | 21 | design | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'requirements' is FAILED. |
-| 1868 | 22 | implementation | TASK_SKIPPED |  | engine | Upstream 'design' is SKIPPED. |
-| 1871 | 23 | implementation | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'design' is SKIPPED. |
-| 1872 | 24 | tests | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
-| 1875 | 25 | tests | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
-| 1876 | 26 | security | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
-| 1878 | 27 | security | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
-| 1879 | 28 | docs | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
-| 1882 | 29 | docs | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
-| 1883 | 30 | release | TASK_SKIPPED |  | engine | Upstream 'tests' is SKIPPED. |
-| 1884 | 31 | release | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'tests' is SKIPPED. |
-| 1888 | 32 |  | RUN_FAILED |  | engine | Failed: [requirements]; skipped: [design, implementation, tests, security, docs, release]. |
-| 1890 | 33 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run FAILED after 30 ms. |
-| 1924 | 34 |  | REQUIREMENT_UPDATED |  | scenario-reviewer (scripted) | Requirement amended to revision 2 by scenario-reviewer (scripted): Clarification from the product owner.. Resume to re-plan affected stages. |
-| 1930 | 35 |  | RUN_RESUMED |  | engine | Drive #3 (RESUME), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 1933 | 36 | requirements | TASK_RESET |  | engine | Was FAILED; reset to PENDING for retry. |
-| 1934 | 37 | requirements | TASK_TRANSITION | FAILED → PENDING | engine |  |
-| 1935 | 38 | design | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1937 | 39 | design | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1939 | 40 | implementation | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1941 | 41 | implementation | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1942 | 42 | tests | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1945 | 43 | tests | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1947 | 44 | security | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1949 | 45 | security | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1951 | 46 | docs | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1953 | 47 | docs | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1954 | 48 | release | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
-| 1956 | 49 | release | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
-| 1960 | 51 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
-| 1964 | 52 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 1965 | 53 | requirements | TASK_STARTED |  | engine | Fingerprint 74d1d0a6dccd; inputs []. |
-| 1969 | 54 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
-| 1971 | 55 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 2146 | 56 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v2 (DETERMINISTIC_DEMO) produced from []. |
-| 2151 | 57 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 3 functional and 0 non-functional statements with 3 acceptance criteria. |
-| 2160 | 58 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
-| 2171 | 59 | requirements | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
-| 2184 | 60 | requirements | APPROVAL_STALE |  | engine | Approval #3 (REJECTED by scenario-reviewer (scripted)) is stale: superseded: requirements produced new output requirement-spec#37 |
-| 2194 | 61 | requirements | APPROVAL_REQUESTED |  | engine | Human approval required: 2 ambiguities need clarification (AMB-1, AMB-2). Approve the proposed assumptions, or reject with a clarification and amend the requirement. (1 earlier approval(s) went stale.) |
-| 2210 | 62 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [requirements]. |
-| 2217 | 63 |  | RUN_DRIVE_ENDED |  | engine | Drive RESUME ended with run WAITING_APPROVAL after 284 ms. |
-| 2278 | 64 | requirements | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Remaining assumptions / readiness reviewed after clarification |
-| 2289 | 65 | requirements | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
-| 2301 | 66 |  | RUN_CONTINUED |  | engine | Drive #4 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 2324 | 68 | design | TASK_TRANSITION | PENDING → READY | engine |  |
-| 2332 | 69 | design | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 2335 | 70 | design | TASK_STARTED |  | engine | Fingerprint ca9a0bd76a4f; inputs [requirement-spec@v2]. |
-| 2342 | 71 | design | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DES-ENTRY-1 ok |
-| 2349 | 72 | design | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 2538 | 73 | design | ARTIFACT_STORED |  | engine | architecture-design@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v2]. |
-| 2542 | 74 | design | AGENT_RESULT |  | engine | Design touches 7 existing components and proposes 0 new ones. |
-| 2550 | 75 | design | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DES-EXIT-1 ok; DES-EXIT-2 ok; DES-EXIT-3 ok; DES-EXIT-4 ok |
-| 2557 | 76 | design | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 2563 | 77 | design | TASK_SUCCEEDED |  | engine | Accepted architecture-design. |
-| 2570 | 79 | implementation | TASK_TRANSITION | PENDING → READY | engine |  |
-| 2577 | 80 | implementation | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 2579 | 81 | implementation | TASK_STARTED |  | engine | Fingerprint abab111105b3; inputs [requirement-spec@v2, architecture-design@v1]. |
-| 2587 | 82 | implementation | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: IMP-ENTRY-1 ok |
-| 2593 | 83 | implementation | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 4607 | 84 | implementation | ARTIFACT_STORED |  | engine | implementation-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
-| 4613 | 85 | implementation | ARTIFACT_STORED |  | engine | change-patch@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
-| 4617 | 86 | implementation | ARTIFACT_STORED |  | engine | interface-contract@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
-| 4618 | 87 | implementation | WORKSPACE_PATCH_APPLIED |  | engine | Patch applied in the isolated worktree at base 189b6c48be70:  1 file changed, 47 insertions(+) |
-| 4619 | 88 | implementation | VALIDATION_COMMAND |  | engine | Validation command 'git-diff-check' passed (exit 0, 78 ms). |
-| 4621 | 89 | implementation | AGENT_RESULT |  | engine | Planned 10 tasks and produced a workspace-applied DOCUMENT patch (change-record) touching 1 file(s) with 0 test file(s); contract DERIVED_PROPOSAL: 2 API, 1 schema change(s). |
-| 4626 | 90 | implementation | EXIT_GATE_PASSED |  | engine | EXIT gate passed: IMP-EXIT-1 ok; IMP-EXIT-2 ok; IMP-EXIT-3 ok; IMP-EXIT-4 ok; IMP-EXIT-5 ok; IMP-EXIT-6 ok; IMP-EXIT-7 ok |
-| 4634 | 91 | implementation | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 4637 | 92 | implementation | TASK_SUCCEEDED |  | engine | Accepted implementation-plan, change-patch, interface-contract. |
-| 4642 | 94 | tests | TASK_TRANSITION | PENDING → READY | engine |  |
-| 4648 | 96 | security | TASK_TRANSITION | PENDING → READY | engine |  |
-| 4651 | 98 | docs | TASK_TRANSITION | PENDING → READY | engine |  |
-| 4655 | 99 | tests | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 4657 | 100 | tests | TASK_STARTED |  | engine | Fingerprint 4f8ae1873ca7; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
-| 4662 | 101 | tests | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: TST-ENTRY-1 ok |
-| 4664 | 102 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 4665 | 103 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 4666 | 104 | security | TASK_STARTED |  | engine | Fingerprint 3b7f75c4f46f; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
-| 4672 | 105 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
-| 4674 | 106 | docs | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 4677 | 107 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 4678 | 108 | docs | TASK_STARTED |  | engine | Fingerprint e10db58d0142; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1]. |
-| 4683 | 109 | docs | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DOC-ENTRY-1 ok |
-| 4685 | 110 | docs | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 4695 | 111 | docs | ARTIFACT_STORED |  | engine | documentation@v1 (DETERMINISTIC) produced from [architecture-design@v1, requirement-spec@v2, implementation-plan@v1]. |
-| 4697 | 112 | docs | AGENT_RESULT |  | engine | Documented 7 component changes and traced 3 acceptance criteria. |
-| 4700 | 113 | docs | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DOC-EXIT-1 ok; DOC-EXIT-2 ok; DOC-EXIT-3 ok |
-| 4703 | 114 | docs | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 4705 | 115 | docs | TASK_SUCCEEDED |  | engine | Accepted documentation. |
-| 4885 | 116 | security | ARTIFACT_STORED |  | engine | risk-assessment@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
-| 4902 | 117 | security | ARTIFACT_STORED |  | engine | policy-report@v1 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
-| 4905 | 118 | security | AGENT_RESULT |  | engine | Assessed 5 risks; policy check found 0 blocker(s) and 2 warning(s). |
-| 4912 | 119 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
-| 4920 | 120 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 4925 | 121 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
-| 5479 | 122 | tests | ARTIFACT_STORED |  | engine | test-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
-| 5485 | 123 | tests | ARTIFACT_STORED |  | engine | test-report@v1 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
-| 5489 | 124 | tests | AGENT_RESULT |  | engine | Generated 6 test cases and executed them with 'plan-verification': 5 passed, 0 failed, 1 not executed. |
-| 5493 | 125 | tests | EXIT_GATE_PASSED |  | engine | EXIT gate passed: TST-EXIT-1 ok; TST-EXIT-2 ok; TST-EXIT-3 ok |
-| 5502 | 126 | tests | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 5506 | 127 | tests | TASK_SUCCEEDED |  | engine | Accepted test-plan, test-report. |
-| 5514 | 129 | release | TASK_TRANSITION | PENDING → READY | engine |  |
-| 5523 | 130 | release | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 5525 | 131 | release | TASK_STARTED |  | engine | Fingerprint 458508c4b97d; inputs [requirement-spec@v2, implementation-plan@v1, change-patch@v1, test-report@v1, policy-report@v1, risk-assessment@v1, documentation@v1]. |
-| 5534 | 132 | release | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REL-ENTRY-1 ok; REL-ENTRY-2 ok |
-| 5536 | 133 | release | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 5554 | 134 | release | ARTIFACT_STORED |  | engine | readiness-report@v1 (DETERMINISTIC) produced from [risk-assessment@v1, documentation@v1, implementation-plan@v1, requirement-spec@v2, test-report@v1, policy-report@v1, change-patch@v1]. |
-| 5561 | 135 | release | AGENT_RESULT |  | engine | All blocking checks passed across 10 planned tasks; 4 advisory item(s) for the approver to weigh. Approving this version approves change-patch@v1#ca3477285e76. |
-| 5564 | 136 | release | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REL-EXIT-1 ok |
-| 5573 | 137 | release | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
-| 5576 | 138 | release | APPROVAL_REQUESTED |  | engine | Human approval required: approval checkpoint required for task 'release' |
-| 5582 | 139 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [release]. |
-| 5584 | 140 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run WAITING_APPROVAL after 3291 ms. |
-| 5658 | 141 | release | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Remaining assumptions / readiness reviewed after clarification |
-| 5661 | 142 | release | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
-| 5665 | 143 |  | RUN_CONTINUED |  | engine | Drive #5 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 5673 | 144 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
-| 5675 | 145 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run SUCCEEDED after 11 ms. |
+| 10 | 1 |  | RUN_CREATED |  | api | Run created: 'Ambiguous: safer links, more useful analytics' (DETERMINISTIC_DEMO, 7 tasks). |
+| 19 | 2 |  | RUN_STARTED |  | engine | Drive #1 (START), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 805 | 3 |  | WORKSPACE_CREATED |  | engine | Isolated worktree run-3 created at base commit 8a467ee14847 in the orchestrator's sandbox clone; the source repository is not modified. |
+| 817 | 5 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
+| 823 | 6 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 825 | 7 | requirements | TASK_STARTED |  | engine | Fingerprint 626b4e28bbb7; inputs []. |
+| 831 | 8 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok; REQ-ENTRY-3 ok |
+| 838 | 9 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 1021 | 10 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v1 (DETERMINISTIC_DEMO) produced from []. |
+| 1023 | 11 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 1 functional and 0 non-functional statements with 1 acceptance criteria. |
+| 1028 | 12 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
+| 1035 | 13 | requirements | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
+| 1039 | 14 | requirements | APPROVAL_REQUESTED |  | engine | Human approval required: 5 ambiguities need clarification (AMB-1, AMB-2, AMB-3, AMB-4, AMB-5). Approve the proposed assumptions, or reject with a clarification and amend the requirement. |
+| 1046 | 15 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [requirements]. |
+| 1048 | 16 |  | RUN_DRIVE_ENDED |  | engine | Drive START ended with run WAITING_APPROVAL after 1031 ms. |
+| 1097 | 17 | requirements | REJECTED |  | scenario-reviewer (scripted) | Rejected by scenario-reviewer (scripted): Too vague to build. 'Safer' means rejecting malicious destinations; 'more useful' means daily click counts. See amended requirement. |
+| 1102 | 18 | requirements | TASK_TRANSITION | WAITING_APPROVAL → FAILED | scenario-reviewer (scripted) | Rejected by scenario-reviewer (scripted): Too vague to build. 'Safer' means rejecting malicious destinations; 'more useful' means daily click counts. See amended requirement. (not retried automatically; amend the requ... |
+| 1108 | 19 |  | RUN_CONTINUED |  | engine | Drive #2 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 1114 | 20 | design | TASK_SKIPPED |  | engine | Upstream 'requirements' is FAILED. |
+| 1116 | 21 | design | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'requirements' is FAILED. |
+| 1118 | 22 | implementation | TASK_SKIPPED |  | engine | Upstream 'design' is SKIPPED. |
+| 1121 | 23 | implementation | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'design' is SKIPPED. |
+| 1122 | 24 | tests | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
+| 1125 | 25 | tests | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
+| 1127 | 26 | security | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
+| 1129 | 27 | security | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
+| 1130 | 28 | docs | TASK_SKIPPED |  | engine | Upstream 'implementation' is SKIPPED. |
+| 1133 | 29 | docs | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'implementation' is SKIPPED. |
+| 1135 | 30 | release | TASK_SKIPPED |  | engine | Upstream 'tests' is SKIPPED. |
+| 1138 | 31 | release | TASK_TRANSITION | PENDING → SKIPPED | engine | Upstream 'tests' is SKIPPED. |
+| 1142 | 32 |  | RUN_FAILED |  | engine | Failed: [requirements]; skipped: [design, implementation, tests, security, docs, release]. |
+| 1144 | 33 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run FAILED after 39 ms. |
+| 1178 | 34 |  | REQUIREMENT_UPDATED |  | scenario-reviewer (scripted) | Requirement amended to revision 2 by scenario-reviewer (scripted): Clarification from the product owner.. Resume to re-plan affected stages. |
+| 1183 | 35 |  | RUN_RESUMED |  | engine | Drive #3 (RESUME), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 1187 | 36 | requirements | TASK_RESET |  | engine | Was FAILED; reset to PENDING for retry. |
+| 1191 | 37 | requirements | TASK_TRANSITION | FAILED → PENDING | engine |  |
+| 1194 | 38 | design | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1199 | 39 | design | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1201 | 40 | implementation | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1204 | 41 | implementation | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1207 | 42 | tests | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1209 | 43 | tests | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1211 | 44 | security | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1213 | 45 | security | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1215 | 46 | docs | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1218 | 47 | docs | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1220 | 48 | release | TASK_RESET |  | engine | Was SKIPPED; reset to PENDING for retry. |
+| 1222 | 49 | release | TASK_TRANSITION | SKIPPED → PENDING | engine |  |
+| 1230 | 51 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
+| 1236 | 52 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 1238 | 53 | requirements | TASK_STARTED |  | engine | Fingerprint 74d1d0a6dccd; inputs []. |
+| 1243 | 54 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok; REQ-ENTRY-3 ok |
+| 1245 | 55 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 1415 | 56 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v2 (DETERMINISTIC_DEMO) produced from []. |
+| 1418 | 57 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 3 functional and 0 non-functional statements with 3 acceptance criteria. |
+| 1422 | 58 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
+| 1429 | 59 | requirements | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
+| 1434 | 60 | requirements | APPROVAL_STALE |  | engine | Approval #3 (REJECTED by scenario-reviewer (scripted)) is stale: superseded: requirements produced new output requirement-spec#37 |
+| 1438 | 61 | requirements | APPROVAL_REQUESTED |  | engine | Human approval required: 2 ambiguities need clarification (AMB-1, AMB-2). Approve the proposed assumptions, or reject with a clarification and amend the requirement. (1 earlier approval(s) went stale.) |
+| 1443 | 62 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [requirements]. |
+| 1445 | 63 |  | RUN_DRIVE_ENDED |  | engine | Drive RESUME ended with run WAITING_APPROVAL after 263 ms. |
+| 1518 | 64 | requirements | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Remaining assumptions / readiness reviewed after clarification |
+| 1522 | 65 | requirements | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
+| 1526 | 66 |  | RUN_CONTINUED |  | engine | Drive #4 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 1534 | 68 | design | TASK_TRANSITION | PENDING → READY | engine |  |
+| 1541 | 69 | design | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 1542 | 70 | design | TASK_STARTED |  | engine | Fingerprint ca9a0bd76a4f; inputs [requirement-spec@v2]. |
+| 1546 | 71 | design | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DES-ENTRY-1 ok |
+| 1550 | 72 | design | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 1715 | 73 | design | ARTIFACT_STORED |  | engine | architecture-design@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v2]. |
+| 1718 | 74 | design | AGENT_RESULT |  | engine | Design touches 7 existing components and proposes 0 new ones. |
+| 1723 | 75 | design | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DES-EXIT-1 ok; DES-EXIT-2 ok; DES-EXIT-3 ok; DES-EXIT-4 ok |
+| 1729 | 76 | design | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 1732 | 77 | design | TASK_SUCCEEDED |  | engine | Accepted architecture-design. |
+| 1741 | 79 | implementation | TASK_TRANSITION | PENDING → READY | engine |  |
+| 1747 | 80 | implementation | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 1749 | 81 | implementation | TASK_STARTED |  | engine | Fingerprint abab111105b3; inputs [requirement-spec@v2, architecture-design@v1]. |
+| 1754 | 82 | implementation | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: IMP-ENTRY-1 ok |
+| 1757 | 83 | implementation | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3017 | 84 | implementation | ARTIFACT_STORED |  | engine | implementation-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
+| 3022 | 85 | implementation | ARTIFACT_STORED |  | engine | change-patch@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
+| 3026 | 86 | implementation | ARTIFACT_STORED |  | engine | interface-contract@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v2]. |
+| 3027 | 87 | implementation | WORKSPACE_PATCH_APPLIED |  | engine | Patch applied in the isolated worktree at base 8a467ee14847:  1 file changed, 47 insertions(+) |
+| 3029 | 88 | implementation | VALIDATION_COMMAND |  | engine | Validation command 'git-diff-check' passed (exit 0, 64 ms). |
+| 3030 | 89 | implementation | AGENT_RESULT |  | engine | Planned 10 tasks and produced a workspace-applied DOCUMENT patch (change-record) touching 1 file(s) with 0 test file(s); contract DERIVED_PROPOSAL: 2 API, 1 schema change(s). |
+| 3036 | 90 | implementation | EXIT_GATE_PASSED |  | engine | EXIT gate passed: IMP-EXIT-1 ok; IMP-EXIT-2 ok; IMP-EXIT-3 ok; IMP-EXIT-4 ok; IMP-EXIT-5 ok; IMP-EXIT-6 ok; IMP-EXIT-7 ok |
+| 3043 | 91 | implementation | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 3045 | 92 | implementation | TASK_SUCCEEDED |  | engine | Accepted implementation-plan, change-patch, interface-contract. |
+| 3049 | 94 | tests | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3053 | 96 | security | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3059 | 98 | docs | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3064 | 99 | tests | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3065 | 100 | tests | TASK_STARTED |  | engine | Fingerprint 47c891c58316; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
+| 3071 | 101 | tests | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: TST-ENTRY-1 ok |
+| 3073 | 102 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3075 | 103 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3077 | 104 | security | TASK_STARTED |  | engine | Fingerprint 14b1ec394950; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
+| 3083 | 105 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
+| 3084 | 106 | docs | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3085 | 107 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3086 | 108 | docs | TASK_STARTED |  | engine | Fingerprint e10db58d0142; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1]. |
+| 3092 | 109 | docs | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DOC-ENTRY-1 ok |
+| 3094 | 110 | docs | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3101 | 111 | docs | ARTIFACT_STORED |  | engine | documentation@v1 (DETERMINISTIC) produced from [architecture-design@v1, requirement-spec@v2, implementation-plan@v1]. |
+| 3103 | 112 | docs | AGENT_RESULT |  | engine | Documented 7 component changes and traced 3 acceptance criteria. |
+| 3107 | 113 | docs | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DOC-EXIT-1 ok; DOC-EXIT-2 ok; DOC-EXIT-3 ok |
+| 3114 | 114 | docs | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 3115 | 115 | docs | TASK_SUCCEEDED |  | engine | Accepted documentation. |
+| 3257 | 116 | security | ARTIFACT_STORED |  | engine | risk-assessment@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 3264 | 117 | security | ARTIFACT_STORED |  | engine | policy-report@v1 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 3266 | 118 | security | AGENT_RESULT |  | engine | Assessed 5 risks; policy check found 0 blocker(s) and 2 warning(s). |
+| 3270 | 119 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
+| 3275 | 120 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 3277 | 121 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
+| 3562 | 122 | tests | ARTIFACT_STORED |  | engine | test-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 3565 | 123 | tests | ARTIFACT_STORED |  | engine | test-report@v1 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 3567 | 124 | tests | AGENT_RESULT |  | engine | Generated 6 test cases and executed them with 'plan-verification': 5 passed, 0 failed, 1 not executed. |
+| 3570 | 125 | tests | EXIT_GATE_PASSED |  | engine | EXIT gate passed: TST-EXIT-1 ok; TST-EXIT-2 ok; TST-EXIT-3 ok |
+| 3575 | 126 | tests | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 3577 | 127 | tests | TASK_SUCCEEDED |  | engine | Accepted test-plan, test-report. |
+| 3582 | 129 | release | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3587 | 130 | release | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3588 | 131 | release | TASK_STARTED |  | engine | Fingerprint bea131ad63e9; inputs [requirement-spec@v2, implementation-plan@v1, change-patch@v1, test-report@v1, policy-report@v1, risk-assessment@v1, documentation@v1]. |
+| 3592 | 132 | release | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REL-ENTRY-1 ok; REL-ENTRY-2 ok |
+| 3594 | 133 | release | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3604 | 134 | release | ARTIFACT_STORED |  | engine | readiness-report@v1 (DETERMINISTIC) produced from [risk-assessment@v1, documentation@v1, implementation-plan@v1, requirement-spec@v2, test-report@v1, policy-report@v1, change-patch@v1]. |
+| 3607 | 135 | release | AGENT_RESULT |  | engine | All blocking checks passed across 10 planned tasks; 4 advisory item(s) for the approver to weigh. Approving this version approves change-patch@v1#ce3c16a312c2. |
+| 3609 | 136 | release | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REL-EXIT-1 ok |
+| 3611 | 137 | release | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
+| 3614 | 138 | release | APPROVAL_REQUESTED |  | engine | Human approval required: approval checkpoint required for task 'release' |
+| 3618 | 139 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [release]. |
+| 3619 | 140 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run WAITING_APPROVAL after 2095 ms. |
+| 3694 | 141 | release | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Remaining assumptions / readiness reviewed after clarification |
+| 3696 | 142 | release | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
+| 3701 | 143 |  | RUN_CONTINUED |  | engine | Drive #5 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 3707 | 144 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
+| 3709 | 145 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run SUCCEEDED after 10 ms. |
 
 Audit chain: **intact** (145 events verified).

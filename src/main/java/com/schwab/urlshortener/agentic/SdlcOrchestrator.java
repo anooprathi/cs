@@ -163,7 +163,14 @@ public class SdlcOrchestrator {
             Long inputTokens = null;
             Long outputTokens = null;
             if (source == ArtifactSource.LLM) {
-                LlmResponse<T> response = llmClient.generate(agent.systemPrompt(), agent.userPrompt(context), agent.outputType());
+                String system = agent.systemPrompt();
+                String user = agent.userPrompt(context);
+                java.util.List<String> secrets = com.schwab.urlshortener.util.SecretPatterns.kindsFound(system, user);
+                if (!secrets.isEmpty()) {
+                    return saveFailed(runId, agent.stage(), source, model, elapsedMs(start), "Blocked before sending: the outgoing prompt "
+                            + "contains what looks like a " + String.join(", ", secrets) + ". Nothing was sent to the model.");
+                }
+                LlmResponse<T> response = llmClient.generate(system, user, agent.outputType());
                 output = response.output();
                 inputTokens = response.inputTokens();
                 outputTokens = response.outputTokens();

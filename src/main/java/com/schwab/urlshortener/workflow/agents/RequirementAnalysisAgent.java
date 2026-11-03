@@ -111,6 +111,12 @@ public class RequirementAnalysisAgent implements StageAgent {
                         in -> {
                             int len = in.context().requirement().length();
                             return Result.of(len <= MAX_REQUIREMENT_LENGTH, len + " characters", len + " characters exceeds the limit");
+                        }),
+                new GateCriterion("REQ-ENTRY-3", "Requirement contains no credentials (checked before any model call)",
+                        in -> {
+                            List<String> kinds = com.schwab.urlshortener.util.SecretPatterns.kindsFound(in.context().requirement());
+                            return Result.of(kinds.isEmpty(), "none found", "looks like a " + String.join(", ", kinds)
+                                    + "; remove it and amend the requirement");
                         }));
     }
 

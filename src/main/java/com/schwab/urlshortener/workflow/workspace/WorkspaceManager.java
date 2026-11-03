@@ -1,7 +1,7 @@
 package com.schwab.urlshortener.workflow.workspace;
 
 import com.schwab.urlshortener.workflow.WorkflowProperties;
-import com.schwab.urlshortener.workflow.audit.SecretPatterns;
+import com.schwab.urlshortener.util.SecretPatterns;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

@@ -83,19 +83,19 @@ Walkthrough with every check: `docs/demo-scenarios.md`.
 
 | Item | Value |
 |---|---|
-| Date | 2026-11-02 |
-| Tree | Commit `189b6c4` **plus the review-pass changes** described in `ENGINEERING_SUMMARY.md` §18 |
+| Date | 2026-11-03 |
+| Tree | Commit `8a467ee` **plus the fixes for the three external-review findings** (`ENGINEERING_SUMMARY.md` §18, "External review") |
 | Java / Maven / OS | Java 21.0.4 (Oracle) / Maven 3.9.9 / Windows 10 |
-| `mvn clean verify` | **Tests run: 409, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`). All coverage checks met. BUILD SUCCESS in 5 min 13 s. `ScenarioEndToEndTest`: 3/3 passed in 190 s, including the real nested Maven test runs |
-| JaCoCo line coverage | **93.4%** (5,829/6,244) bundle-wide, clearing the 80% gate. `workflow` packages: 91.7% (3,800/4,145) |
+| `mvn clean verify` | **Tests run: 424, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`). All coverage checks met. BUILD SUCCESS in 4 min 33 s. `ScenarioEndToEndTest`: 3/3 passed in 163 s, including the real nested Maven test runs, now judged from Surefire XML evidence |
+| JaCoCo line coverage | **93.5%** (5,970/6,386) bundle-wide, clearing the 80% gate. `workflow` packages: 91.9% (3,902/4,248) |
 | Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | Exit 0. Evidence checks: greenfield **11/11**, brownfield **10/10**, ambiguous **7/7**. Reports copied to `docs/demo-output/` |
-| Real tests inside the scenarios | Greenfield: `mvn -B -o test` in the patched worktree on the generated `ClickLimitIntegrationTest`, `ClickLimitServiceTest`, `UrlMappingMapperClickLimitTest`, and the plan's existing classes. Maven reported **Tests run: 113, Failures: 0, Errors: 0, Skipped: 0**. Brownfield: the generated `ExpiredLinkReactivationIntegrationTest` and `ExpiredLinkReactivationServiceTest` plus the plan's classes, **Tests run: 83, Failures: 0, Errors: 0, Skipped: 0** |
+| Real tests inside the scenarios | Greenfield: `mvn -B -o test` in the patched worktree on the generated `ClickLimitIntegrationTest`, `ClickLimitServiceTest`, `UrlMappingMapperClickLimitTest`, and the plan's existing classes. The fresh Surefire reports show **113 tests in 7 classes, 0 failures, 0 errors, 0 skipped**. Brownfield: the generated `ExpiredLinkReactivationIntegrationTest` and `ExpiredLinkReactivationServiceTest` plus the plan's classes, **83 tests in 5 classes, 0 failures** |
 | Application smoke test | `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (by hand, earlier on 2026-11-02 before the review pass): health `UP`, create → 302 redirect, workflow capabilities 200, Swagger UI 200. The post-review Newman run exercises the same paths |
-| Postman / Newman (`postman/url-shortener.postman_collection.json`, 106 requests in 12 folders) | `newman run` (Newman 6.2.3) against a freshly started dev instance, re-run after the review pass: **180 assertions, 0 failures**. That covers the URL-shortener folders 0–7, plus new folders `8. Agentic SDLC` (10 requests) and `9. Workflow Orchestrator` (34 requests: a full greenfield run through approval, promotion, re-planning, and compensation, plus an ambiguous run through clarification and rejection; async runs are polled). Folders 0–7 register fixed tenant names, so they need a fresh instance; folders 8–9 also pass on a re-run |
+| Postman / Newman (`postman/url-shortener.postman_collection.json`, 112 requests in 12 folders) | `newman run` (Newman 6.2.3) against a freshly started dev instance: **193 assertions, 0 failures**. That covers the URL-shortener folders 0–7, plus `8. Agentic SDLC` and `9. Workflow Orchestrator`. Folder 9 reproduces two of the external-review findings at the API level: deciding on output produced before an amendment gets `409 Re-planning pending`, and a requirement containing a credential gets 400 in both APIs. Folders 0–7 register fixed tenant names, so they need a fresh instance |
 | Live Anthropic API | **Not run** (`AnthropicLiveSmokeTest` skipped) |
 | OWASP dependency-check | **Not run** (needs a multi-gigabyte NVD download) |
 
-Static analysis (`javac -Xlint:all`, SpotBugs) and the credential scan were re-run in the review pass; results are in `SUBMISSION_NOTES.md`.
+Static analysis (`javac -Xlint:all`, SpotBugs) and the credential scan were re-run on the final tree; results are in `SUBMISSION_NOTES.md`.
 
 ## 6. Deliverables, and where to look
 

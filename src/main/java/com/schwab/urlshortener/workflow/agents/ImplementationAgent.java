@@ -317,7 +317,7 @@ public class ImplementationAgent implements StageAgent {
                 }
                 ProcessRunner.Result r = workspaces.run(ws, argv, commandTimeout);
                 validation.add(new ChangePatch.CommandEvidence(name, argv, r.exitCode(), r.succeeded(), r.timedOut(), r.durationMs(),
-                        com.schwab.urlshortener.workflow.audit.SecretPatterns.redact(r.error() != null ? r.error() : r.output())));
+                        com.schwab.urlshortener.util.SecretPatterns.redact(r.error() != null ? r.error() : r.output())));
                 evidence.add(Checks.evidence("validation command '" + name + "'", r.succeeded(), "exit " + r.exitCode()));
             }
             patch = new ChangePatch(proposal.summary(), kind, author, ws.baseCommit(), true, true, applied.files(), testFiles,
@@ -417,7 +417,7 @@ public class ImplementationAgent implements StageAgent {
                     String clipped = content.length() > CONTEXT_FILE_CHARS ? content.substring(0, CONTEXT_FILE_CHARS) + "\n…(truncated)" : content;
                     budget -= clipped.length();
                     sb.append("<repository_file path=\"").append(c.get().path()).append("\">\n")
-                            .append(com.schwab.urlshortener.workflow.audit.SecretPatterns.redact(clipped)).append("\n</repository_file>\n");
+                            .append(com.schwab.urlshortener.util.SecretPatterns.redact(clipped)).append("\n</repository_file>\n");
                 } catch (IOException ignored) {
                     // unreadable file: omitted from context
                 }

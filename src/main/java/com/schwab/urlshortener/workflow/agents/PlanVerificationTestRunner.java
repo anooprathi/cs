@@ -73,7 +73,7 @@ public class PlanVerificationTestRunner implements TestRunner {
         int passed = count(results, TestReport.Status.PASSED);
         int failed = count(results, TestReport.Status.FAILED);
         return new TestReport(name(), false, passed + failed, passed, failed, count(results, TestReport.Status.NOT_EXECUTED),
-                List.copyOf(results), null, null, null, NOTICE);
+                List.copyOf(results), null, null, null, NOTICE, null);
     }
 
     static int count(List<TestReport.Result> results, TestReport.Status status) {

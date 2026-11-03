@@ -29,6 +29,19 @@ becomes STALE, with a reason and timestamp and an `APPROVAL_STALE` event, when:
 Stale approvals are never deleted. When the same version is reused after re-planning, its approval stays VALID
 (`WorkflowEngineTest#approvalSurvivesReplanning_whenTheApprovedVersionIsReused`).
 
+**No decision on un-re-planned work.** A requirement amendment bumps the run's requirement revision, but its tasks
+stay as they were until a resume re-plans them. While re-planning is pending, every decision and every promotion is
+refused with `409 Re-planning pending`. Pending means either:
+- the revision the tasks were planned against lags the current revision, or
+- any completed or waiting task's recorded input fingerprint no longer matches its current inputs.
+
+The engine enforces the same rule: even the `CONTINUE` drive that follows a decision re-validates when an amendment
+was never planned. Without this, approving a readiness report produced for the *old* requirement would complete the
+run and allow promotion, skipping every stage the amendment should have re-run, including policy checks
+(`WorkflowEngineTest#amendmentWhileWaitingForApproval_blocksTheDecisionUntilTheRunIsReplanned`,
+`#decisionRefused_whenAnyCompletedTasksInputsNoLongerMatchItsFingerprint`,
+`#continueDrive_afterAnAmendment_replansInsteadOfSkippingValidation`).
+
 **Promotion binds transitively.** The readiness report lists its `approvalSubject`: the exact
 `change-patch@vN#hash`, `test-report`, and `policy-report` versions it vouches for. Promotion requires all of these:
 - a VALID APPROVED approval of the current readiness version,
@@ -60,6 +73,16 @@ through environment variables.
 - **Repository content** given to the model (impacted files' current text) is wrapped in `<repository_file>` tags,
   redacted, size-capped, and declared as untrusted context in the system prompt.
 - **Requirement text** is wrapped in delimiters and declared as data.
+- **Credentials never cross the LLM boundary.** They're checked at three points, before anything can be sent or stored:
+  1. *Intake.* A requirement (or amendment, or title) containing a credential-shaped value is refused with 400
+     before it is stored, in both `/api/v1/workflows` and `/api/v1/agentic`.
+  2. *Requirements stage.* `REQ-ENTRY-3` checks again before the requirements agent runs.
+  3. *Outgoing call.* `LlmExecutionAdapter`, the preview's `SdlcOrchestrator`, and finally `AnthropicLlmClient` itself
+     scan the actual outgoing prompts and refuse to send. In the orchestrator this is a `PolicyViolation`:
+     never retried and never routed to the fallback.
+
+  Every message names the kind of credential, never the value. POL-SECRET still checks artifacts and patch diffs
+  downstream.
 - **Tools** are enforced per agent (`ToolPolicy`, `AgentRequest.requireTool`). A violation fails the task and is never
   retried.
 - **Commands**: no shell, ever (`ProcessRunner` uses argv). Only git, the named validation commands, and the

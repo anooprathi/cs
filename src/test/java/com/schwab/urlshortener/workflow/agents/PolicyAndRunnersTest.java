@@ -9,7 +9,7 @@ import com.schwab.urlshortener.agentic.model.TestPlan;
 import com.schwab.urlshortener.workflow.WorkflowProperties;
 import com.schwab.urlshortener.workflow.artifact.PolicyReport;
 import com.schwab.urlshortener.workflow.artifact.TestReport;
-import com.schwab.urlshortener.workflow.audit.SecretPatterns;
+import com.schwab.urlshortener.util.SecretPatterns;
 import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import com.schwab.urlshortener.workflow.workspace.ProcessRunner;
@@ -119,45 +119,159 @@ class PolicyAndRunnersTest {
         assertThat(r.results()).anyMatch(x -> x.detail().contains("target test file not found"));
     }
 
-    @Test
-    void commandRunner_reallyExecutes_andMapsExitCodes(@TempDir Path dir) throws Exception {
-        Files.createDirectories(dir.resolve("src/test/java"));
-        Files.writeString(dir.resolve("src/test/java/FooTest.java"), "class FooTest {}");
-        TestPlan plan = new TestPlan(List.of(
-                new TestPlan.TestCase("TC-1", "t", TestPlan.TestLevel.UNIT, "src/test/java/FooTest.java", "s", List.of("AC-1")),
-                new TestPlan.TestCase("TC-2", "t", TestPlan.TestLevel.UNIT, "src/test/java/Missing.java", "s", List.of("AC-1"))));
-        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+    // ---------------------------------------------------------------- command test runner: evidence, not exit codes
 
-        TestReport pass = new CommandTestRunner(List.of(java, "-version"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir, List.of());
-        TestReport targeted = new CommandTestRunner(List.of(java, "-Dtests={tests}", "-version"), Duration.ofSeconds(60))
-                .run(plan, ctx.requirementSpec(), dir, List.of());
-        TestReport fail = new CommandTestRunner(List.of(java, "-no-such-flag"), Duration.ofSeconds(60)).run(plan, ctx.requirementSpec(), dir, List.of());
+    /**
+     * A stand-in "test command": a single-file Java program that writes Surefire-format reports, exactly as told,
+     * for the classes named in its first argument (the substituted {tests}), then exits with the given code.
+     * Spec arguments: Class=tests/failures/errors/skipped. A class without a spec gets no report.
+     */
+    private static final String REPORT_WRITER = """
+            import java.nio.file.*;
+            import java.util.*;
+            public class ReportWriter {
+                public static void main(String[] a) throws Exception {
+                    Set<String> selected = new HashSet<>(Arrays.asList(a[0].split(",")));
+                    Path dir = Path.of("target/surefire-reports");
+                    Files.createDirectories(dir);
+                    for (int i = 2; i < a.length; i++) {
+                        String[] kv = a[i].split("=");
+                        String[] n = kv[1].split("/");
+                        if (selected.contains(kv[0])) {
+                            Files.writeString(dir.resolve("TEST-p." + kv[0] + ".xml"), "<?xml version=\\"1.0\\"?><testsuite name=\\"p." + kv[0]
+                                    + "\\" tests=\\"" + n[0] + "\\" failures=\\"" + n[1] + "\\" errors=\\"" + n[2] + "\\" skipped=\\"" + n[3] + "\\"/>");
+                        }
+                    }
+                    System.exit(Integer.parseInt(a[1]));
+                }
+            }
+            """;
 
-        assertThat(pass.productTestsExecuted()).isTrue();
-        assertThat(pass.exitCode()).isZero();
-        assertThat(pass.failed()).isZero();
-        assertThat(targeted.command()).contains("-Dtests=FooTest");
-        assertThat(targeted.results()).filteredOn(r -> r.testCaseId().equals("TC-2")).singleElement()
-                .satisfies(r -> assertThat(r.status()).isEqualTo(TestReport.Status.NOT_EXECUTED));
-        assertThat(fail.exitCode()).isNotZero();
-        assertThat(fail.failed()).isEqualTo(2);
-    }
+    private static final String JAVA = Path.of(System.getProperty("java.home"), "bin", "java").toString();
 
-    @Test
-    void commandRunner_alsoRunsTheTestClassesThePatchAdds(@TempDir Path dir) throws Exception {
+    private static Path workingTree(Path dir) throws Exception {
         Files.createDirectories(dir.resolve("src/test/java/p"));
         Files.writeString(dir.resolve("src/test/java/p/FooTest.java"), "class FooTest {}");
         Files.writeString(dir.resolve("src/test/java/p/NewTest.java"), "class NewTest {}");
-        TestPlan plan = new TestPlan(List.of(
-                new TestPlan.TestCase("TC-1", "t", TestPlan.TestLevel.UNIT, "src/test/java/p/FooTest.java", "s", List.of("AC-1"))));
-        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        Files.writeString(dir.resolve("ReportWriter.java"), REPORT_WRITER);
+        return dir;
+    }
 
-        TestReport r = new CommandTestRunner(List.of(java, "-Dtests={tests}", "-version"), Duration.ofSeconds(60))
-                .run(plan, ctx.requirementSpec(), dir, List.of("src/test/java/p/NewTest.java", "src/test/java/p/Gone.java"));
+    private static final TestPlan FOO_PLAN = new TestPlan(List.of(
+            new TestPlan.TestCase("TC-1", "t", TestPlan.TestLevel.UNIT, "src/test/java/p/FooTest.java", "s", List.of("AC-1")),
+            new TestPlan.TestCase("TC-2", "t", TestPlan.TestLevel.UNIT, "src/test/java/p/Missing.java", "s", List.of("AC-1"))));
 
-        assertThat(r.command()).contains("-Dtests=NewTest,FooTest");
-        assertThat(r.results()).extracting(TestReport.Result::testCaseId).containsExactly("patch:NewTest", "TC-1");
-        assertThat(r.passed()).isEqualTo(2);
+    private TestReport runWriter(Path dir, List<String> patchTests, String exitCode, String... specs) {
+        List<String> argv = new java.util.ArrayList<>(List.of(JAVA, dir.resolve("ReportWriter.java").toString(), "{tests}", exitCode));
+        argv.addAll(List.of(specs));
+        return new CommandTestRunner(argv, Duration.ofSeconds(120)).run(FOO_PLAN, ctx.requirementSpec(), dir, patchTests);
+    }
+
+    private static TestReport.Result row(TestReport r, String id) {
+        return r.results().stream().filter(x -> x.testCaseId().equals(id)).findFirst().orElseThrow();
+    }
+
+    @Test
+    void commandRunner_passesOnlyOnFreshReportsShowingExecutedTests(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of("src/test/java/p/NewTest.java", "src/test/java/p/Gone.java"), "0",
+                "FooTest=3/0/0/0", "NewTest=2/0/0/1");
+
+        assertThat(r.command()).contains("NewTest,FooTest");
+        assertThat(r.results()).extracting(TestReport.Result::testCaseId).containsExactly("patch:NewTest", "TC-1", "TC-2");
+        assertThat(row(r, "patch:NewTest").status()).isEqualTo(TestReport.Status.PASSED);
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.PASSED);
+        assertThat(row(r, "TC-1").detail()).contains("3 tests, 0 failures");
+        assertThat(row(r, "TC-2").status()).isEqualTo(TestReport.Status.NOT_EXECUTED);
+        assertThat(r.productTestsExecuted()).isTrue();
+        assertThat(r.junit().tests()).isEqualTo(5);
+        assertThat(r.junit().executed()).isEqualTo(4);
+        assertThat(r.allExecutedPassed()).isTrue();
+    }
+
+    /** The reviewer's probe: an empty test class, Maven exits 0 with "Tests run: 0". That is not a pass. */
+    @Test
+    void commandRunner_emptyTestClass_withExitCodeZero_isAFailure_andNoProductTestExecuted(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of(), "0", "FooTest=0/0/0/0");
+
+        assertThat(r.exitCode()).isZero();
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "TC-1").detail()).contains("0 tests ran");
+        assertThat(r.productTestsExecuted()).isFalse();
+        assertThat(r.passed()).isZero();
+        assertThat(r.allExecutedPassed()).isFalse();
+    }
+
+    @Test
+    void commandRunner_missingReportForATargetedClass_isAFailure(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of("src/test/java/p/NewTest.java"), "0", "FooTest=3/0/0/0");
+
+        assertThat(row(r, "patch:NewTest").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "patch:NewTest").detail()).contains("no Surefire report");
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.PASSED);
+        assertThat(r.allExecutedPassed()).isFalse();
+    }
+
+    @Test
+    void commandRunner_allTestsSkipped_isAFailure(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of(), "0", "FooTest=2/0/0/2");
+
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "TC-1").detail()).contains("every test was skipped");
+        assertThat(r.productTestsExecuted()).isFalse();
+    }
+
+    @Test
+    void commandRunner_failuresInTheReport_failEvenWithExitCodeZero(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of(), "0", "FooTest=3/1/0/0");
+
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "TC-1").detail()).contains("1 failures");
+    }
+
+    @Test
+    void commandRunner_nonZeroExit_failsEvenWhenTheReportLooksGreen(@TempDir Path dir) throws Exception {
+        TestReport r = runWriter(workingTree(dir), List.of(), "1", "FooTest=3/0/0/0");
+
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "TC-1").detail()).contains("command exit code 1");
+    }
+
+    @Test
+    void commandRunner_staleReportsFromAnEarlierRun_areNotEvidence(@TempDir Path dir) throws Exception {
+        Path tree = workingTree(dir);
+        Files.createDirectories(tree.resolve("target/surefire-reports"));
+        Files.writeString(tree.resolve("target/surefire-reports/TEST-p.FooTest.xml"),
+                "<?xml version=\"1.0\"?><testsuite name=\"p.FooTest\" tests=\"9\" failures=\"0\" errors=\"0\" skipped=\"0\"/>");
+
+        TestReport r = runWriter(tree, List.of(), "0");   // this run writes no report at all
+
+        assertThat(row(r, "TC-1").status()).isEqualTo(TestReport.Status.FAILED);
+        assertThat(row(r, "TC-1").detail()).contains("no Surefire report");
+        assertThat(r.productTestsExecuted()).isFalse();
+    }
+
+    @Test
+    void commandRunner_reportWithADoctype_isRejectedNotExpanded(@TempDir Path dir) throws Exception {
+        Path reports = Files.createDirectories(dir.resolve("target/surefire-reports"));
+        Files.writeString(reports.resolve("TEST-p.EvilTest.xml"), "<?xml version=\"1.0\"?><!DOCTYPE x [<!ENTITY e SYSTEM \"file:///etc/passwd\">]>"
+                + "<testsuite name=\"p.EvilTest\" tests=\"1\" failures=\"0\" errors=\"0\" skipped=\"0\">&e;</testsuite>");
+
+        CommandTestRunner.Reports read = CommandTestRunner.readReports(reports);
+        assertThat(read.classes()).as("a malformed or hostile report counts as missing").isEmpty();
+        assertThat(read.unreadable()).singleElement().satisfies(f -> assertThat(f).startsWith("TEST-p.EvilTest.xml"));
+    }
+
+    @Test
+    void commandRunner_wholeSuiteCommand_needsAtLeastOneExecutedTest(@TempDir Path dir) throws Exception {
+        Path tree = workingTree(dir);
+        List<String> argv = List.of(JAVA, tree.resolve("ReportWriter.java").toString(), "FooTest", "0", "FooTest=0/0/0/0");
+
+        TestReport r = new CommandTestRunner(argv, Duration.ofSeconds(120)).run(FOO_PLAN, ctx.requirementSpec(), tree, List.of());
+
+        assertThat(r.results()).allSatisfy(x -> {
+            assertThat(x.status()).isEqualTo(TestReport.Status.FAILED);
+            assertThat(x.detail()).contains("no test executed");
+        });
     }
 
     @Test
