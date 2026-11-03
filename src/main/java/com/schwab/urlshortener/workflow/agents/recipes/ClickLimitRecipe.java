@@ -37,6 +37,9 @@ public class ClickLimitRecipe implements CodeRecipe {
     static final String SERVICE = "src/main/java/com/schwab/urlshortener/service/impl/UrlShortenerServiceImpl.java";
     static final String EXCEPTION = "src/main/java/com/schwab/urlshortener/exception/ClickLimitReachedException.java";
     static final String TEST = "src/test/java/com/schwab/urlshortener/integration/ClickLimitIntegrationTest.java";
+    static final String SERVICE_TEST = "src/test/java/com/schwab/urlshortener/service/ClickLimitServiceTest.java";
+    static final String MAPPER_TEST = "src/test/java/com/schwab/urlshortener/service/impl/UrlMappingMapperClickLimitTest.java";
+    static final String README = "README.md";
 
     @Override
     public String id() {
@@ -123,21 +126,36 @@ public class ClickLimitRecipe implements CodeRecipe {
                 }
                 """);
         edits.create(TEST, TEST_SOURCE);
+        edits.create(SERVICE_TEST, SERVICE_TEST_SOURCE);
+        edits.create(MAPPER_TEST, MAPPER_TEST_SOURCE);
+
+        edits.replaceOnce(README, "| POST   | `/api/v1/urls`                        | API key     | Create a short URL |",
+                "| POST   | `/api/v1/urls`                        | API key     | Create a short URL. Optional `maxClicks` (at least 1): "
+                        + "after that many redirects the link returns `410 Gone` |");
+        edits.replaceOnce(README, "| GET    | `/api/v1/urls/{shortCode}/stats`      | API key     | Tenant-scoped — 404s for another tenant's link |",
+                "| GET    | `/api/v1/urls/{shortCode}/stats`      | API key     | Tenant-scoped — 404s for another tenant's link. "
+                        + "Includes `remainingClicks` (null when the link has no click limit) |");
+        edits.replaceOnce(README, "| GET    | `/{shortCode}`                        | **none**    | Public redirect (302), rate-limited against the link owner's quota |",
+                "| GET    | `/{shortCode}`                        | **none**    | Public redirect (302), rate-limited against the link owner's quota. "
+                        + "`410 Gone` once expired or once its click limit is reached |");
 
         int sites = edits.appendConstructorArgument("src/test/java", "ShortenUrlRequest", "null", List.of(TEST))
                 + edits.appendConstructorArgument("src/test/java", "UrlStatsResponse", "null", List.of(TEST))
                 + edits.appendConstructorArgument("src/test/java", "CachedShortCodeLookup.RedirectTarget", "null", List.of(TEST));
 
-        Map<String, String> rationale = Map.of(
-                ENTITY, "AC: optional click limit stored per link (nullable column, null = unlimited)",
-                REQUEST, "AC: create accepts maxClicks; below 1 rejected with 400 by Bean Validation",
-                STATS, "AC: stats show remaining clicks",
-                MAPPER, "AC: remainingClicks = max(0, maxClicks - clickCount), null when unlimited",
-                REPOSITORY, "AC: limit enforced atomically inside the click-count UPDATE (race-free)",
-                LOOKUP, "Cached redirect projection carries maxClicks so the service can tell 'limit reached' from a no-op",
-                SERVICE, "AC: redirect returns 410 Gone once the limit is reached; create persists maxClicks",
-                EXCEPTION, "AC: 410 Gone through the existing ApiException handler",
-                TEST, "Integration test for every acceptance criterion of this change");
+        Map<String, String> rationale = Map.ofEntries(
+                Map.entry(ENTITY, "AC: optional click limit stored per link (nullable column, null = unlimited)"),
+                Map.entry(REQUEST, "AC: create accepts maxClicks; below 1 rejected with 400 by Bean Validation"),
+                Map.entry(STATS, "AC: stats show remaining clicks"),
+                Map.entry(MAPPER, "AC: remainingClicks = max(0, maxClicks - clickCount), null when unlimited"),
+                Map.entry(REPOSITORY, "AC: limit enforced atomically inside the click-count UPDATE (race-free)"),
+                Map.entry(LOOKUP, "Cached redirect projection carries maxClicks so the service can tell 'limit reached' from a no-op"),
+                Map.entry(SERVICE, "AC: redirect returns 410 Gone once the limit is reached; create persists maxClicks"),
+                Map.entry(EXCEPTION, "AC: 410 Gone through the existing ApiException handler"),
+                Map.entry(TEST, "Integration test for every acceptance criterion of this change, through the real HTTP stack"),
+                Map.entry(SERVICE_TEST, "Unit test (Mockito): the redirect decision for limited, unlimited and exhausted links, and create persisting maxClicks"),
+                Map.entry(MAPPER_TEST, "Unit test: the remainingClicks arithmetic, including the clamp at zero"),
+                Map.entry(README, "Documentation: the API reference shows the new request field, response field and 410 case"));
         List<PatchProposal.FileChange> files = new ArrayList<>();
         edits.edits().forEach((path, content) -> files.add(new PatchProposal.FileChange(path, content,
                 rationale.getOrDefault(path, "Codemod: append null for the new record component at existing call sites"))));
@@ -155,6 +173,172 @@ public class ClickLimitRecipe implements CodeRecipe {
                 List.of(new InterfaceContract.SchemaChange("url_mapping", "max_clicks", "COLUMN_ADDED",
                         "ALTER TABLE url_mapping ADD COLUMN max_clicks INTEGER NULL")));
     }
+
+    private static final String SERVICE_TEST_SOURCE = """
+            package com.schwab.urlshortener.service;
+
+            import com.schwab.urlshortener.billing.UsageMeteringService;
+            import com.schwab.urlshortener.dto.ShortenUrlRequest;
+            import com.schwab.urlshortener.entity.UrlMapping;
+            import com.schwab.urlshortener.exception.ClickLimitReachedException;
+            import com.schwab.urlshortener.ratelimit.RateLimitResult;
+            import com.schwab.urlshortener.ratelimit.TenantRateLimiterService;
+            import com.schwab.urlshortener.repository.UrlMappingRepository;
+            import com.schwab.urlshortener.service.impl.CachedShortCodeLookup;
+            import com.schwab.urlshortener.service.impl.UrlMappingMapper;
+            import com.schwab.urlshortener.service.impl.UrlShortenerServiceImpl;
+            import com.schwab.urlshortener.tenant.RateLimitPlan;
+            import com.schwab.urlshortener.tenant.Tenant;
+            import com.schwab.urlshortener.tenant.TenantService;
+            import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+            import org.junit.jupiter.api.BeforeEach;
+            import org.junit.jupiter.api.Test;
+            import org.junit.jupiter.api.extension.ExtendWith;
+            import org.mockito.ArgumentCaptor;
+            import org.mockito.Mock;
+            import org.mockito.junit.jupiter.MockitoExtension;
+            import org.mockito.junit.jupiter.MockitoSettings;
+            import org.mockito.quality.Strictness;
+            import org.springframework.test.util.ReflectionTestUtils;
+
+            import java.time.Instant;
+
+            import static org.assertj.core.api.Assertions.assertThat;
+            import static org.assertj.core.api.Assertions.assertThatThrownBy;
+            import static org.mockito.ArgumentMatchers.any;
+            import static org.mockito.ArgumentMatchers.anyLong;
+            import static org.mockito.ArgumentMatchers.anyString;
+            import static org.mockito.ArgumentMatchers.eq;
+            import static org.mockito.Mockito.never;
+            import static org.mockito.Mockito.verify;
+            import static org.mockito.Mockito.when;
+
+            /**
+             * Unit tests for the click-limit decision in UrlShortenerServiceImpl, with every collaborator mocked.
+             * The limit itself is enforced by the atomic UPDATE (covered by ClickLimitIntegrationTest against H2);
+             * here the repository's "rows updated" answer is scripted to pin how the service interprets it.
+             * Generated by the workflow's deterministic demo recipe 'click-limit'.
+             */
+            @ExtendWith(MockitoExtension.class)
+            @MockitoSettings(strictness = Strictness.LENIENT)
+            class ClickLimitServiceTest {
+
+                private static final Long TENANT_ID = 7L;
+
+                @Mock
+                private UrlMappingRepository repository;
+                @Mock
+                private TenantService tenantService;
+                @Mock
+                private CachedShortCodeLookup cachedShortCodeLookup;
+                @Mock
+                private UrlSafetyChecker urlSafetyChecker;
+                @Mock
+                private TenantRateLimiterService rateLimiterService;
+                @Mock
+                private UsageMeteringService usageMeteringService;
+                @Mock
+                private ShortCodeGenerator shortCodeGenerator;
+
+                private UrlShortenerServiceImpl service;
+
+                @BeforeEach
+                void setUp() {
+                    when(urlSafetyChecker.isSafe(anyString())).thenReturn(true);
+                    when(shortCodeGenerator.generateCandidate()).thenReturn("lim1234");
+                    when(tenantService.getPlanForRateLimiting(anyLong())).thenReturn(RateLimitPlan.STANDARD);
+                    when(tenantService.getTenantOrThrow(anyLong())).thenReturn(Tenant.builder().id(TENANT_ID).build());
+                    when(rateLimiterService.tryConsumeRedirectPermit(anyLong(), any())).thenReturn(new RateLimitResult(true, 99, 100, 0));
+                    service = new UrlShortenerServiceImpl(repository, tenantService, cachedShortCodeLookup, urlSafetyChecker,
+                            rateLimiterService, usageMeteringService, shortCodeGenerator, new UrlMappingMapper(), new SimpleMeterRegistry());
+                    ReflectionTestUtils.setField(service, "baseUrl", "http://localhost:8080");
+                }
+
+                private void target(Integer maxClicks) {
+                    when(cachedShortCodeLookup.findActive("lim1234"))
+                            .thenReturn(new CachedShortCodeLookup.RedirectTarget(TENANT_ID, "https://example.com", null, maxClicks));
+                }
+
+                @Test
+                void limitedLink_underTheLimit_redirectsAndMeters() {
+                    target(3);
+                    when(repository.incrementClickCount(eq("lim1234"), any(Instant.class))).thenReturn(1);
+
+                    assertThat(service.resolveAndRecordHit("lim1234")).isEqualTo("https://example.com");
+                    verify(usageMeteringService).recordRedirect(TENANT_ID);
+                }
+
+                @Test
+                void limitedLink_whenTheGuardedUpdateCountsNothing_isGoneAndNotMetered() {
+                    target(3);
+                    when(repository.incrementClickCount(eq("lim1234"), any(Instant.class))).thenReturn(0);
+
+                    assertThatThrownBy(() -> service.resolveAndRecordHit("lim1234")).isInstanceOf(ClickLimitReachedException.class);
+                    verify(usageMeteringService, never()).recordRedirect(anyLong());
+                }
+
+                @Test
+                void unlimitedLink_neverHitsTheLimitBranch() {
+                    target(null);
+                    when(repository.incrementClickCount(eq("lim1234"), any(Instant.class))).thenReturn(0);
+
+                    assertThat(service.resolveAndRecordHit("lim1234")).isEqualTo("https://example.com");
+                }
+
+                @Test
+                void create_persistsTheRequestedLimit() {
+                    when(repository.existsByShortCode(anyString())).thenReturn(false);
+                    when(repository.save(any(UrlMapping.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                    service.createShortUrl(new ShortenUrlRequest("https://example.com/a", null, null, 5), TENANT_ID);
+
+                    ArgumentCaptor<UrlMapping> saved = ArgumentCaptor.forClass(UrlMapping.class);
+                    verify(repository).save(saved.capture());
+                    assertThat(saved.getValue().getMaxClicks()).isEqualTo(5);
+                }
+            }
+            """;
+
+    private static final String MAPPER_TEST_SOURCE = """
+            package com.schwab.urlshortener.service.impl;
+
+            import com.schwab.urlshortener.entity.UrlMapping;
+            import org.junit.jupiter.api.Test;
+
+            import static org.assertj.core.api.Assertions.assertThat;
+
+            /**
+             * Unit tests for remainingClicks in UrlMappingMapper: null when unlimited, never negative.
+             * Generated by the workflow's deterministic demo recipe 'click-limit'.
+             */
+            class UrlMappingMapperClickLimitTest {
+
+                private final UrlMappingMapper mapper = new UrlMappingMapper();
+
+                private Long remaining(Integer maxClicks, long clickCount) {
+                    UrlMapping m = UrlMapping.builder().shortCode("abc1234").originalUrl("https://example.com")
+                            .maxClicks(maxClicks).clickCount(clickCount).active(true).build();
+                    return mapper.toStatsResponse(m).remainingClicks();
+                }
+
+                @Test
+                void unlimitedLink_hasNoRemainingCount() {
+                    assertThat(remaining(null, 12)).isNull();
+                }
+
+                @Test
+                void limitedLink_reportsWhatIsLeft() {
+                    assertThat(remaining(5, 0)).isEqualTo(5L);
+                    assertThat(remaining(5, 4)).isEqualTo(1L);
+                    assertThat(remaining(5, 5)).isZero();
+                }
+
+                @Test
+                void neverNegative_evenIfCountsOvershoot() {
+                    assertThat(remaining(5, 9)).isZero();
+                }
+            }
+            """;
 
     private static final String TEST_SOURCE = """
             package com.schwab.urlshortener.integration;

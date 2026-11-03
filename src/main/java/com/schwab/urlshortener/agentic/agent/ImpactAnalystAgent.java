@@ -119,7 +119,46 @@ public class ImpactAnalystAgent implements SdlcAgent<ImpactAnalysis> {
                 .sorted()
                 .toList();
 
-        return new ImpactAnalysis(impacted, proposed, unaffected);
+        return new ImpactAnalysis(impacted, proposed, unaffected,
+                dataFlows(selected.stream().map(Scored::component).toList(), proposed));
+    }
+
+    /** Inbound-to-persistence order: a request passes the security chain, an API entry point, services, then data. */
+    private static final List<Layer> FLOW_ORDER = List.of(Layer.SECURITY, Layer.API, Layer.SERVICE, Layer.CROSS_CUTTING, Layer.DATA);
+
+    /**
+     * Deterministic data flows: one path per impacted API entry point, through the impacted security, service,
+     * cross-cutting and data components in that layer order. With no impacted entry point, a single internal path
+     * through the rest. Derived from catalog layers, not traced through the code, and the description says so.
+     */
+    static List<ImpactAnalysis.DataFlow> dataFlows(List<CatalogComponent> selected, List<ProposedComponent> proposed) {
+        List<String> security = names(selected, Layer.SECURITY);
+        List<String> downstream = new ArrayList<>();
+        for (Layer layer : List.of(Layer.SERVICE, Layer.CROSS_CUTTING, Layer.DATA)) {
+            downstream.addAll(names(selected, layer));
+        }
+        proposed.forEach(p -> downstream.add(0, p.name()));
+        String note = " Ordered by catalog layer (" + FLOW_ORDER.stream().map(Enum::name).collect(java.util.stream.Collectors.joining(" -> "))
+                + "); derived from the layers, not traced through the code, so verify the exact call path.";
+        List<ImpactAnalysis.DataFlow> flows = new ArrayList<>();
+        for (String api : names(selected, Layer.API)) {
+            List<String> steps = new ArrayList<>(security);
+            steps.add(api);
+            steps.addAll(downstream);
+            flows.add(new ImpactAnalysis.DataFlow(api + " request path", steps,
+                    "Requests entering through " + api + " and the impacted components they reach." + note));
+        }
+        if (flows.isEmpty() && !downstream.isEmpty()) {
+            List<String> steps = new ArrayList<>(security);
+            steps.addAll(downstream);
+            flows.add(new ImpactAnalysis.DataFlow("Internal path", steps,
+                    "No impacted API entry point; the change stays inside these components." + note));
+        }
+        return flows;
+    }
+
+    private static List<String> names(List<CatalogComponent> components, Layer layer) {
+        return components.stream().filter(c -> c.layer() == layer).map(CatalogComponent::name).toList();
     }
 
     /**
@@ -154,7 +193,9 @@ public class ImpactAnalystAgent implements SdlcAgent<ImpactAnalysis> {
                 would change, with change type, a concrete reason, and the AC-n ids each change serves. \
                 Use the catalog names exactly; a name not in the catalog will be rejected by the quality gate. \
                 If something genuinely new is needed, list it under newComponents instead. \
-                Name notable areas that stay unaffected.
+                Name notable areas that stay unaffected. \
+                Describe the data flows the change touches (e.g. an inbound request through controller, service, \
+                cache and repository), entry point first, using only catalog or proposed component names.
                 """);
     }
 

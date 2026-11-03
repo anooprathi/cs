@@ -49,7 +49,9 @@ class CodeRecipesTest {
         Map<String, String> files = files(p);
 
         assertThat(files).containsKeys(ClickLimitRecipe.ENTITY, ClickLimitRecipe.REQUEST, ClickLimitRecipe.STATS, ClickLimitRecipe.MAPPER,
-                ClickLimitRecipe.REPOSITORY, ClickLimitRecipe.LOOKUP, ClickLimitRecipe.SERVICE, ClickLimitRecipe.EXCEPTION, ClickLimitRecipe.TEST);
+                ClickLimitRecipe.REPOSITORY, ClickLimitRecipe.LOOKUP, ClickLimitRecipe.SERVICE, ClickLimitRecipe.EXCEPTION, ClickLimitRecipe.TEST,
+                ClickLimitRecipe.SERVICE_TEST, ClickLimitRecipe.MAPPER_TEST, ClickLimitRecipe.README);
+        assertThat(files.get(ClickLimitRecipe.README)).contains("Optional `maxClicks`", "`remainingClicks`", "click limit is reached");
         assertThat(files.get(ClickLimitRecipe.ENTITY)).contains("private Integer maxClicks;");
         assertThat(files.get(ClickLimitRecipe.REQUEST)).contains("@Min(value = 1", "Integer maxClicks\n) {");
         assertThat(files.get(ClickLimitRecipe.REPOSITORY)).contains("AND (u.maxClicks IS NULL OR u.clickCount < u.maxClicks)");
@@ -65,7 +67,7 @@ class CodeRecipesTest {
         assertThat(p.summary()).containsPattern("\\b[1-9][0-9]* existing test call sites updated by codemod");
 
         assertThat(ChangePatch.kindOf(p.files())).isEqualTo(ChangePatch.Kind.CODE);
-        assertThat(ChangePatch.testFilesOf(p.files())).contains(ClickLimitRecipe.TEST);
+        assertThat(ChangePatch.testFilesOf(p.files())).contains(ClickLimitRecipe.TEST, ClickLimitRecipe.SERVICE_TEST, ClickLimitRecipe.MAPPER_TEST);
         assertThat(p.apiChanges()).extracting(InterfaceContract.ApiChange::path).contains("/api/v1/urls", "/{shortCode}");
         assertThat(p.schemaChanges()).singleElement().satisfies(s -> assertThat(s.ddl()).contains("ADD COLUMN max_clicks"));
     }
@@ -78,7 +80,9 @@ class CodeRecipesTest {
         PatchProposal p = new ExpiredReactivationRecipe().apply(REPO);
         Map<String, String> files = files(p);
 
-        assertThat(files).containsOnlyKeys(ExpiredReactivationRecipe.SERVICE, ExpiredReactivationRecipe.EXCEPTION, ExpiredReactivationRecipe.TEST);
+        assertThat(files).containsOnlyKeys(ExpiredReactivationRecipe.SERVICE, ExpiredReactivationRecipe.EXCEPTION, ExpiredReactivationRecipe.TEST,
+                ExpiredReactivationRecipe.SERVICE_TEST, ExpiredReactivationRecipe.README);
+        assertThat(files.get(ExpiredReactivationRecipe.README)).contains("`409` if the link's expiry has passed");
         assertThat(files.get(ExpiredReactivationRecipe.SERVICE)).contains("if (mapping.isExpired()) {\n            throw new ExpiredLinkReactivationException");
         assertThat(files.get(ExpiredReactivationRecipe.EXCEPTION)).contains("HttpStatus.CONFLICT");
         assertThat(p.apiChanges()).singleElement().satisfies(a -> assertThat(a.change()).isEqualTo("RESPONSE_STATUS_ADDED"));

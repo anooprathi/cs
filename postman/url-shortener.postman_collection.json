@@ -4020,7 +4020,7 @@
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
                   "const md = pm.response.text();",
                   "pm.test('final engineering summary sections', () => {",
-                  "    ['Final engineering summary', '### What was built', '### Plan and rationale', '### Risks and trade-offs', '### Assumptions']",
+                  "    ['Final engineering summary', '### What was built', '### Plan and rationale', '### Validation', '### Risks and trade-offs', '### Assumptions', '### Limitations']",
                   "        .forEach(s => pm.expect(md, s).to.include(s));",
                   "});"
                 ]

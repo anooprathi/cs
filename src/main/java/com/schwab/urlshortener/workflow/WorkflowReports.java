@@ -7,6 +7,7 @@ import com.schwab.urlshortener.agentic.model.RiskAssessment;
 import com.schwab.urlshortener.agentic.review.MarkdownRenderer;
 import com.schwab.urlshortener.workflow.api.WorkflowViews;
 import com.schwab.urlshortener.workflow.artifact.InterfaceContract;
+import com.schwab.urlshortener.workflow.artifact.ReadinessReport;
 import com.schwab.urlshortener.workflow.artifact.TestReport;
 import com.schwab.urlshortener.workflow.workspace.ChangePatch;
 import com.schwab.urlshortener.workflow.audit.AuditLog;
@@ -152,6 +153,7 @@ public class WorkflowReports {
         builtSection(sb, patch, tests, content(current, "interface-contract", InterfaceContract.class));
         List<Map<String, Object>> results = latestAgentResults(events);
         planSection(sb, content(current, "implementation-plan", ImplementationPlan.class), results);
+        validationSection(sb, run.tasks(), content(current, "readiness-report", ReadinessReport.class));
         risksSection(sb, content(current, "risk-assessment", RiskAssessment.class), results);
         assumptionsSection(sb, content(current, "requirement-spec", RequirementSpec.class), results);
 
@@ -182,7 +184,7 @@ public class WorkflowReports {
         picked.forEach(e -> sb.append("- `#").append(e.getSequence()).append("` **").append(e.getType()).append("**")
                 .append(e.getTaskKey() == null ? "" : " `" + e.getTaskKey() + "`").append(": ")
                 .append(e.getMessage() == null ? "" : e.getMessage().replace("\n", " ")).append('\n'));
-        sb.append("\n### What this run did NOT do\n\n")
+        sb.append("\n### Limitations (what this run did NOT do)\n\n")
                 .append("- It did not merge, push, or deploy anything. Promotion (if shown) is a local branch in the orchestrator's sandbox clone.\n");
         if (run.executionMode() == ExecutionMode.DETERMINISTIC_DEMO) {
             sb.append(patch != null && patch.kind() == ChangePatch.Kind.CODE
@@ -307,6 +309,38 @@ public class WorkflowReports {
             }
         }
         sb.append(any ? "\n" : "_None recorded._\n\n");
+    }
+
+    /** Every task's exit gate as recorded (criteria passed / total, failed ids), then the release-readiness checklist. */
+    private void validationSection(StringBuilder sb, List<WorkflowViews.Task> tasks, ReadinessReport readiness) {
+        sb.append("### Validation\n\n| Task | State | Exit gate | Failed criteria |\n|---|---|---|---|\n");
+        for (WorkflowViews.Task t : tasks) {
+            com.fasterxml.jackson.databind.JsonNode gate = t.exitGate();
+            String result = "not evaluated";
+            String failed = "";
+            if (gate != null && gate.has("criteria")) {
+                int total = gate.get("criteria").size();
+                List<String> failedIds = new java.util.ArrayList<>();
+                gate.get("criteria").forEach(c -> {
+                    if (!c.path("passed").asBoolean()) {
+                        failedIds.add(c.path("id").asText());
+                    }
+                });
+                result = (failedIds.isEmpty() ? "passed " : "FAILED ") + (total - failedIds.size()) + "/" + total;
+                failed = String.join(", ", failedIds);
+            }
+            sb.append("| ").append(t.key()).append(" | ").append(t.state()).append(" | ").append(result).append(" | ")
+                    .append(failed).append(" |\n");
+        }
+        sb.append('\n');
+        if (readiness != null && readiness.checks() != null) {
+            sb.append("Release readiness (").append(readiness.ready() ? "**ready**" : "**not ready**").append("):\n\n")
+                    .append("| Check | Blocking | Result | Detail |\n|---|---|---|---|\n");
+            readiness.checks().forEach(c -> sb.append("| ").append(c.id()).append(" ").append(cells.cell(c.description())).append(" | ")
+                    .append(c.blocking() ? "yes" : "advisory").append(" | ").append(c.passed() ? "pass" : "**FAIL**").append(" | ")
+                    .append(cells.cell(c.detail())).append(" |\n"));
+            sb.append('\n');
+        }
     }
 
     private void risksSection(StringBuilder sb, RiskAssessment risks, List<Map<String, Object>> results) {

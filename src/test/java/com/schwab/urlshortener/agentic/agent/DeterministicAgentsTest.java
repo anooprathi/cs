@@ -96,6 +96,32 @@ class DeterministicAgentsTest {
     }
 
     @Test
+    void impact_dataFlows_runFromEachEntryPointThroughServicesToData() {
+        ImpactAnalysis impact = ctx.impactAnalysis();
+
+        assertThat(impact.dataFlows()).isNotEmpty();
+        assertThat(impact.dataFlows()).anySatisfy(f -> {
+            assertThat(f.name()).isEqualTo("RedirectController request path");
+            assertThat(f.steps()).first().isEqualTo("RedirectController");
+            // entry point before service before persistence
+            assertThat(f.steps().indexOf("UrlShortenerServiceImpl")).isGreaterThan(f.steps().indexOf("RedirectController"));
+            assertThat(f.steps().indexOf("UrlMapping")).isGreaterThan(f.steps().indexOf("UrlShortenerServiceImpl"));
+            assertThat(f.description()).contains("not traced through the code");
+        });
+        assertThat(impact.dataFlows()).allSatisfy(f -> assertThat(f.steps()).allMatch(ctx.catalog()::contains));
+    }
+
+    @Test
+    void impact_dataFlows_noEntryPoint_isOneInternalPath_andNewComponentsLeadIt() {
+        AgentContext unrelated = AgenticFixtures.runDeterministicPipeline("Weather widget", "Show tomorrow's weather forecast.");
+
+        assertThat(unrelated.impactAnalysis().dataFlows()).singleElement().satisfies(f -> {
+            assertThat(f.name()).isEqualTo("Internal path");
+            assertThat(f.steps()).containsExactly("WeatherWidgetService");
+        });
+    }
+
+    @Test
     void impact_actorWordAlone_doesNotPullInTenantComponents() {
         List<String> names = ctx.impactAnalysis().impactedComponents().stream().map(ImpactedComponent::component).toList();
 

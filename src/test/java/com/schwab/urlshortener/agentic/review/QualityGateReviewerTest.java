@@ -63,11 +63,25 @@ class QualityGateReviewerTest {
     }
 
     @Test
+    void dataFlowThroughAnUnknownComponent_isBlocker() {
+        ImpactAnalysis impact = ctx.impactAnalysis();
+        List<ImpactAnalysis.DataFlow> flows = new ArrayList<>(impact.dataFlows());
+        flows.add(new ImpactAnalysis.DataFlow("invented path", List.of("RedirectController", "ClickLimitEnforcerBean"), "d"));
+        ctx.put(SdlcStage.IMPACT, new ImpactAnalysis(impact.impactedComponents(), impact.newComponents(), impact.unaffectedAreas(), flows));
+
+        QualityGateReport report = gate.review(ctx);
+
+        assertThat(report.passed()).isFalse();
+        assertThat(blockers(report, QualityGateReviewer.RULE_DATA_FLOW_UNKNOWN_COMPONENT)).singleElement()
+                .satisfies(f -> assertThat(f.message()).contains("invented path").contains("ClickLimitEnforcerBean"));
+    }
+
+    @Test
     void hallucinatedComponent_isBlocker() {
         ImpactAnalysis impact = ctx.impactAnalysis();
         List<ImpactedComponent> components = new ArrayList<>(impact.impactedComponents());
         components.add(new ImpactedComponent("ClickLimitEnforcerBean", ChangeType.MODIFY, "sounds plausible", List.of("AC-1")));
-        ctx.put(SdlcStage.IMPACT, new ImpactAnalysis(components, impact.newComponents(), impact.unaffectedAreas()));
+        ctx.put(SdlcStage.IMPACT, new ImpactAnalysis(components, impact.newComponents(), impact.unaffectedAreas(), impact.dataFlows()));
 
         QualityGateReport report = gate.review(ctx);
 
@@ -175,7 +189,7 @@ class QualityGateReviewerTest {
     @Test
     void emptyOrNullLists_failCleanlyInsteadOfThrowing() {
         ctx.put(SdlcStage.REQUIREMENTS, new RequirementSpec("t", "s", null, null, null, null, null));
-        ctx.put(SdlcStage.IMPACT, new ImpactAnalysis(null, null, null));
+        ctx.put(SdlcStage.IMPACT, new ImpactAnalysis(null, null, null, null));
         ctx.put(SdlcStage.PLAN, new ImplementationPlan(null));
         ctx.put(SdlcStage.TESTS, new TestPlan(null));
         ctx.put(SdlcStage.RISKS, new RiskAssessment(null));

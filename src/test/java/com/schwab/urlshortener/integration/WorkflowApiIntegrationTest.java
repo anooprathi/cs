@@ -150,6 +150,10 @@ class WorkflowApiIntegrationTest {
                 .andExpect(content().string(containsString("_Why:_")))
                 .andExpect(content().string(containsString("### Risks and trade-offs")))
                 .andExpect(content().string(containsString("### Assumptions")))
+                .andExpect(content().string(containsString("### Validation")))
+                .andExpect(content().string(containsString("| implementation | SUCCEEDED | passed 7/7 |")))
+                .andExpect(content().string(containsString("Release readiness (**ready**)")))
+                .andExpect(content().string(containsString("### Limitations (what this run did NOT do)")))
                 .andExpect(content().string(containsString("the patch is a change-record document")));
         admin(post(BASE + "/runs/" + id + "/promotion").contentType(MediaType.APPLICATION_JSON).content(json(Map.of(
                 "reviewer", "eng-lead", "patchVersion", 1, "confirm", true))))

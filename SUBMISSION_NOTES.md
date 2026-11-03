@@ -83,6 +83,9 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 | Repository content and model output untrusted; no model shell commands | `PatchProposal` (no command field), delimiters, typed outputs, argv-only commands from config | n/a | `ChangeControlPolicyTest`, `WorkspaceManagerTest#apply_refusesToWriteOutsideTheWorktree_…` |
 | Reviewable patches + approved validation commands | `ImplementationAgent`, `ChangePatch` (`kind`, `author`, diff, validation evidence), `policy.validation-commands` | greenfield `change-patch` | scenario check "Patch applied in an isolated git worktree and validated" |
 | Real code change and test in demo mode (greenfield + brownfield) | `agents/recipes/` (`ClickLimitRecipe`, `ExpiredReactivationRecipe`, anchored `SourceEdits` + test-call-site codemod) | greenfield, brownfield | `CodeRecipesTest`; scenario check "Real code change: CODE patch with tests, executed by the real test command" |
+| Unit and integration tests, plus supporting documentation, in the generated change | Recipes emit Mockito unit tests, a pure mapper test, a `@SpringBootTest` integration test, and README API-reference edits in the same patch | greenfield, brownfield | `CodeRecipesTest`; the nested `mvn test` in `ScenarioEndToEndTest` runs every generated test class |
+| Codebase reasoning: impacted modules, APIs, data flows | `ImpactAnalysis.dataFlows` (entry point → service → persistence, derived from catalog layers in demo mode), quality-gate rule `impact.data-flow-component-known`, workflow gate DES-EXIT-4 | every run's `architecture-design` artifact | `DeterministicAgentsTest#impact_dataFlows_…`, `QualityGateReviewerTest#dataFlowThroughAnUnknownComponent_isBlocker` |
+| Testing approach | `docs/testing-approach.md` | n/a | n/a |
 | Tests executed against the patched worktree | `TestExecution` (per run), `CommandTestRunner` (+ the patch's own test classes), `ProcessRunner` (Windows `.cmd` resolution) | `"testExecution":"COMMAND"` | `PolicyAndRunnersTest#commandRunner_alsoRunsTheTestClassesThePatchAdds`, `ScenarioEndToEndTest` (real nested `mvn test`) |
 | API / schema definition artifact | `artifact/InterfaceContract` (`interface-contract`), gate IMP-EXIT-7 | greenfield (3 API changes + DDL) | `PolicyAndRunnersTest#contractGate_…`; scenario check "Interface contract declares …" |
 | Human approval before merging/deploying | `WorkflowService.promote` (valid approval + bound patch + confirm) | greenfield promotion | `WorkspaceManagerTest#promote_…`, `WorkflowApiIntegrationTest` (promotion refused without workspace) |
@@ -125,19 +128,18 @@ Validation evidence names test classes under `src/test/java/com/schwab/urlshorte
 
 ## Verification (this working tree)
 
-Run on 2026-11-01, Java 21.0.4 / Maven 3.9.9, Windows 10. The build, scenario, and CLI rows are from this
-pass (real code recipes, per-run test execution). The `javac -Xlint`, SpotBugs, and credential-scan rows are
-from the previous pass and were not re-run.
+Run on 2026-11-02, Java 21.0.4 / Maven 3.9.9, Windows 10, after the review pass (`ENGINEERING_SUMMARY.md` §18).
+Every row below was re-run on that tree.
 
 | Check | Result |
 |---|---|
-| `mvn clean verify` | **405 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.1% (workflow packages 91.7%), clearing the 80% gate. BUILD SUCCESS |
-| Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree. Maven reported 106 and 80 tests, 0 failures |
-| Postman / Newman | 106-request collection, including new folders `8. Agentic SDLC` and `9. Workflow Orchestrator`, against a freshly started dev instance: 180 assertions, 0 failures |
-| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 11/11, brownfield 10/10, ambiguous 7/7 evidence checks, exit 0. Reports in `docs/demo-output/` |
-| `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 27 `[serial]` (exceptions without `serialVersionUID`, same as the existing exception classes), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API), 1 annotation-processor notice |
-| SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 229 findings before fixes. Fixed 5 null-path and 2 map-iteration findings in new code; 224 remain: 213 `EI_EXPOSE_REP/REP2` (Spring/Lombok false positives), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 3 `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` (not re-triaged after the fixes), 1 format-string newline, 1 `DM_EXIT` (the CLI's exit code) |
-| Credential-pattern scan (`git grep`, tracked files, same patterns as `SecretPatterns`) | Only deliberate synthetic test fixtures. One fixture derived from a real dev key was replaced with a synthetic value |
+| `mvn clean verify` | **409 tests, 0 failures, 0 errors, 1 skipped** (`AnthropicLiveSmokeTest`, opt-in, spends API credit). JaCoCo line coverage 93.4% (workflow packages 91.7%), clearing the 80% gate. BUILD SUCCESS |
+| Scenario tests | `ScenarioEndToEndTest` 3/3, using real git and, for greenfield and brownfield, a real nested `mvn -B -o test` in the patched worktree, including the generated unit and integration tests. Maven reported 113 and 83 tests, 0 failures |
+| Postman / Newman | 106-request collection, including folders `8. Agentic SDLC` and `9. Workflow Orchestrator`, against a freshly started dev instance: 180 assertions, 0 failures |
+| Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | greenfield 11/11, brownfield 10/10, ambiguous 7/7 evidence checks, exit 0. Reports (now with Validation and Limitations sections and data flows) in `docs/demo-output/` |
+| `javac -Xlint:all` (all main sources) | 0 errors. 31 warnings: 28 `[serial]` (exceptions without `serialVersionUID`, consistent with every existing exception class), 3 `[deprecation]` in pre-existing `LocalRateLimiterBackend` (Bucket4j API) |
+| SpotBugs 4.8.6 (max effort, medium threshold, via Maven) | 226 findings, none actionable: 218 `EI_EXPOSE_REP/REP2` (records and Lombok/Spring beans exposing collections, a known false-positive category), 6 `CT_CONSTRUCTOR_THROW` (intentional fail-fast startup validation), 1 `VA_FORMAT_STRING_USES_NEWLINE` (deliberate: Markdown must be `\n`, `%n` would emit CRLF on Windows), 1 `DM_EXIT` (the scenario CLI's exit code). The 3 null-path findings left untriaged by the previous pass were false positives and are now cleared by explicit null checks |
+| Credential-pattern scan (`git grep`, tracked files including Markdown, same patterns as `SecretPatterns`) | Only deliberate synthetic fixtures in redaction tests. No real key in any tracked file or demo output |
 | OWASP dependency-check | **Not run**: it needs a multi-gigabyte NVD download |
 | Live Anthropic API | **Not run** |
 

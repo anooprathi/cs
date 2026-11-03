@@ -61,6 +61,7 @@ public class QualityGateReviewer {
     public static final String RULE_NO_CRITERIA = "requirements.acceptance-criteria-present";
     public static final String RULE_DUPLICATE_ID = "ids.unique";
     public static final String RULE_UNKNOWN_COMPONENT = "impact.component-in-catalog";
+    public static final String RULE_DATA_FLOW_UNKNOWN_COMPONENT = "impact.data-flow-component-known";
     public static final String RULE_UNKNOWN_CRITERION = "traceability.criterion-exists";
     public static final String RULE_DANGLING_DEPENDENCY = "plan.dependency-exists";
     public static final String RULE_CYCLE = "plan.acyclic";
@@ -109,6 +110,14 @@ public class QualityGateReviewer {
         Set<String> knownComponents = new HashSet<>();
         catalog.all().forEach(c -> knownComponents.add(c.name()));
         nullSafe(impact.newComponents()).stream().map(ProposedComponent::name).forEach(knownComponents::add);
+        for (ImpactAnalysis.DataFlow flow : nullSafe(impact.dataFlows())) {
+            for (String step : nullSafe(flow.steps())) {
+                if (!knownComponents.contains(step)) {
+                    findings.add(blocker(RULE_DATA_FLOW_UNKNOWN_COMPONENT, "Data flow '" + flow.name() + "' passes through '" + step
+                            + "', which is neither in the catalog nor a proposed new component."));
+                }
+            }
+        }
 
         // --- plan graph ---
         Set<String> taskIds = tasks.stream().map(PlanTask::id).filter(Objects::nonNull).collect(Collectors.toSet());

@@ -68,7 +68,7 @@ class PolicyAndRunnersTest {
     @Test
     void securityLayerChange_withoutAHighMitigatedRisk_isABlocker() {
         ImpactAnalysis design = new ImpactAnalysis(List.of(new ImpactAnalysis.ImpactedComponent("SecurityConfig",
-                ImpactAnalysis.ChangeType.MODIFY, "r", List.of())), List.of(), List.of());
+                ImpactAnalysis.ChangeType.MODIFY, "r", List.of())), List.of(), List.of(), List.of());
 
         PolicyReport none = evaluate("x", design, new RiskAssessment(List.of()), cleanPatch);
         PolicyReport acknowledged = evaluate("x", design, new RiskAssessment(List.of(new RiskAssessment.Risk("R-1", "auth",

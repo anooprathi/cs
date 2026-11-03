@@ -60,7 +60,7 @@ class AgenticLlmModeIntegrationTest {
             List<ImpactAnalysis.ImpactedComponent> withHallucination = new java.util.ArrayList<>(real.impactedComponents());
             withHallucination.add(new ImpactAnalysis.ImpactedComponent("ClickQuotaEnforcer",
                     ImpactAnalysis.ChangeType.MODIFY, "plausible but nonexistent", List.of("AC-2")));
-            ImpactAnalysis hallucinated = new ImpactAnalysis(withHallucination, real.newComponents(), real.unaffectedAreas());
+            ImpactAnalysis hallucinated = new ImpactAnalysis(withHallucination, real.newComponents(), real.unaffectedAreas(), real.dataFlows());
             return new LlmClient() {
                 @Override
                 public String modelId() {

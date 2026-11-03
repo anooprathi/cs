@@ -73,8 +73,8 @@ the timeline.
 
 | Scenario | Requirement | What it demonstrates |
 |---|---|---|
-| **Greenfield** | Optional per-link click limits: 410 Gone once reached, 400 below 1, remaining clicks on stats | The `click-limit` recipe writes real code across entity, DTOs, repository (an atomic limit in the click-count `UPDATE`), cache projection, and service, plus a codemod over 40 existing test call sites and a new `ClickLimitIntegrationTest`. Also: an interface contract with migration DDL; **real `mvn test` in the worktree**; parallel tests/security/docs; an injected transient failure retried and recovered; a version-bound human approval; promotion to a local branch; and a formatting-only re-plan that reuses unaffected work and keeps the approval valid |
-| **Brownfield** | Refuse reactivation of expired links with 409 (plus an out-of-scope "charge the card" clause) | Impact analysis of existing modules. **A rejected policy gate** (POL-SCOPE) with no retry, while the independent branches finish. Then the amendment re-plans: the worktree is reset, and the `expired-reactivation` recipe adds the 409 guard and `ExpiredLinkReactivationIntegrationTest`, which really runs |
+| **Greenfield** | Optional per-link click limits: 410 Gone once reached, 400 below 1, remaining clicks on stats | The `click-limit` recipe writes real code across entity, DTOs, repository (an atomic limit in the click-count `UPDATE`), cache projection, and service, plus a codemod over 40 existing test call sites, **generated unit tests** (`ClickLimitServiceTest`, `UrlMappingMapperClickLimitTest`), an integration test (`ClickLimitIntegrationTest`), and the README API-reference update. Also: an interface contract with migration DDL; **real `mvn test` in the worktree**; parallel tests/security/docs; an injected transient failure retried and recovered; a version-bound human approval; promotion to a local branch; and a formatting-only re-plan that reuses unaffected work and keeps the approval valid |
+| **Brownfield** | Refuse reactivation of expired links with 409 (plus an out-of-scope "charge the card" clause) | Impact analysis of existing modules. **A rejected policy gate** (POL-SCOPE) with no retry, while the independent branches finish. Then the amendment re-plans: the worktree is reset, and the `expired-reactivation` recipe adds the 409 guard, a unit test (`ExpiredLinkReactivationServiceTest`), an integration test (`ExpiredLinkReactivationIntegrationTest`) and the README update, and those tests really run |
 | **Ambiguous** | "Make links safer and analytics more useful." | Ambiguities with proposed assumptions; a clarification checkpoint that holds all downstream work; a human rejection that goes **STALE** when the spec changes; re-planning on the clarified requirement. No recipe matches, so the patch is honestly a change record |
 
 Walkthrough with every check: `docs/demo-scenarios.md`.
@@ -83,30 +83,38 @@ Walkthrough with every check: `docs/demo-scenarios.md`.
 
 | Item | Value |
 |---|---|
-| Date | 2026-11-01 |
-| Tree | Commit `21d51c3` **plus this pass's uncommitted changes** (see `git status`) |
+| Date | 2026-11-02 |
+| Tree | Commit `189b6c4` **plus the review-pass changes** described in `ENGINEERING_SUMMARY.md` §18 |
 | Java / Maven / OS | Java 21.0.4 (Oracle) / Maven 3.9.9 / Windows 10 |
-| `mvn clean verify` | **Tests run: 405, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`). All coverage checks met. BUILD SUCCESS in 5 min 06 s. `ScenarioEndToEndTest`: 3/3 passed in 167 s, including the real nested Maven test runs |
-| JaCoCo line coverage | **93.1%** (5,742/6,167) bundle-wide, clearing the 80% gate. `workflow` packages: 91.7% (3,747/4,088) |
+| `mvn clean verify` | **Tests run: 409, Failures: 0, Errors: 0, Skipped: 1** (the skip is the opt-in `AnthropicLiveSmokeTest`). All coverage checks met. BUILD SUCCESS in 5 min 13 s. `ScenarioEndToEndTest`: 3/3 passed in 190 s, including the real nested Maven test runs |
+| JaCoCo line coverage | **93.4%** (5,829/6,244) bundle-wide, clearing the 80% gate. `workflow` packages: 91.7% (3,800/4,145) |
 | Scenario CLI (`--app.workflow.cli.scenario=all`, dev profile) | Exit 0. Evidence checks: greenfield **11/11**, brownfield **10/10**, ambiguous **7/7**. Reports copied to `docs/demo-output/` |
-| Real tests inside the scenarios | Greenfield: `mvn -B -o test` on `ClickLimitIntegrationTest` plus 4 plan classes in the patched worktree, Maven reported **Tests run: 106, Failures: 0, Errors: 0, Skipped: 0**. Brownfield: `ExpiredLinkReactivationIntegrationTest` plus 3 plan classes, **Tests run: 80, Failures: 0, Errors: 0, Skipped: 0** |
-| Application smoke test | Not re-run by hand in this pass. `WorkflowApiIntegrationTest` and `UrlShortenerIntegrationTest` drive the real HTTP stack through MockMvc |
-| Postman / Newman (`postman/url-shortener.postman_collection.json`, 106 requests in 12 folders) | `newman run` (Newman 6.2.3) against a freshly started dev instance: **180 assertions, 0 failures**. That covers the URL-shortener folders 0–7, plus new folders `8. Agentic SDLC` (10 requests) and `9. Workflow Orchestrator` (34 requests: a full greenfield run through approval, promotion, re-planning, and compensation, plus an ambiguous run through clarification and rejection; async runs are polled). Folders 0–7 register fixed tenant names, so they need a fresh instance; folders 8–9 also pass on a re-run |
+| Real tests inside the scenarios | Greenfield: `mvn -B -o test` in the patched worktree on the generated `ClickLimitIntegrationTest`, `ClickLimitServiceTest`, `UrlMappingMapperClickLimitTest`, and the plan's existing classes. Maven reported **Tests run: 113, Failures: 0, Errors: 0, Skipped: 0**. Brownfield: the generated `ExpiredLinkReactivationIntegrationTest` and `ExpiredLinkReactivationServiceTest` plus the plan's classes, **Tests run: 83, Failures: 0, Errors: 0, Skipped: 0** |
+| Application smoke test | `mvn spring-boot:run -Dspring-boot.run.profiles=dev` (by hand, earlier on 2026-11-02 before the review pass): health `UP`, create → 302 redirect, workflow capabilities 200, Swagger UI 200. The post-review Newman run exercises the same paths |
+| Postman / Newman (`postman/url-shortener.postman_collection.json`, 106 requests in 12 folders) | `newman run` (Newman 6.2.3) against a freshly started dev instance, re-run after the review pass: **180 assertions, 0 failures**. That covers the URL-shortener folders 0–7, plus new folders `8. Agentic SDLC` (10 requests) and `9. Workflow Orchestrator` (34 requests: a full greenfield run through approval, promotion, re-planning, and compensation, plus an ambiguous run through clarification and rejection; async runs are polled). Folders 0–7 register fixed tenant names, so they need a fresh instance; folders 8–9 also pass on a re-run |
 | Live Anthropic API | **Not run** (`AnthropicLiveSmokeTest` skipped) |
 | OWASP dependency-check | **Not run** (needs a multi-gigabyte NVD download) |
 
-Static-analysis and secret-scan results from the previous pass are in `SUBMISSION_NOTES.md`.
+Static analysis (`javac -Xlint:all`, SpotBugs) and the credential scan were re-run in the review pass; results are in `SUBMISSION_NOTES.md`.
 
-## 6. Where to look, by evaluation criterion
+## 6. Deliverables, and where to look
 
-| Criterion | Where |
+| Deliverable (assignment §5) | Where |
+|---|---|
+| Working prototype, runnable end to end | §3 above; `mvn clean verify`; the scenario CLI; the Postman collection |
+| Architecture overview (components, orchestration model, control flow, key decisions) | `ARCHITECTURE.md` §9 (orchestrator) and §8 (preview), `docs/architecture.md`, `docs/orchestration.md` |
+| Three scenarios, each showing decomposition, orchestration, validation | §4 above, `docs/demo-scenarios.md`, `docs/demo-output/*.md` |
+| Setup instructions | §3 above, `README.md` §3 and §13 |
+| Testing approach, limitations, and trade-offs | `docs/testing-approach.md`, `docs/limitations-and-tradeoffs.md` |
+
+| Evaluation criterion | Where |
 |---|---|
 | Agentic SDLC design and orchestration | `ARCHITECTURE.md` §9 (and §8 for the preview), `docs/architecture.md`, `docs/orchestration.md` |
 | Requirement → implementation traceability | `SUBMISSION_NOTES.md`: every assignment requirement, with its code location, demo command, and validation evidence |
 | Governance, safety, human-in-the-loop | `docs/governance.md`: version-bound approvals, staleness, policies, change control, rollback boundaries |
 | Realism and quality of outputs | `docs/demo-output/*.md`: real runs. The greenfield patch is a real diff against this repository, and its tests ran |
 | AI-assisted execution: what was generated, edited, or rejected, and why | `ENGINEERING_SUMMARY.md` §18 (orchestrator) and §17 (preview). Both include the bugs found only by running the system |
-| Validation and risk management | Scenario evidence checks (computed from the audit log, not asserted by the script); `WorkflowEngineTest` as the behavioral spec; `docs/limitations-and-tradeoffs.md` |
+| Validation and risk management | `docs/testing-approach.md`; scenario evidence checks (computed from the audit log, not asserted by the script); `WorkflowEngineTest` as the behavioral spec; `docs/limitations-and-tradeoffs.md` |
 | Engineering judgment | §2 above; the "Rejected" lists in `ENGINEERING_SUMMARY.md` §17-18; the design-decision tables in `ARCHITECTURE.md` §8.2 and §9.3 |
 | The URL shortener itself | `README.md` §1-11, `ARCHITECTURE.md` §1-7, `ENGINEERING_SUMMARY.md` §1-16 |
 

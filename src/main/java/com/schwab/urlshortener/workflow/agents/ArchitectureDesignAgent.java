@@ -42,7 +42,7 @@ public class ArchitectureDesignAgent implements StageAgent {
 
     @Override
     public String version() {
-        return "2";
+        return "3";
     }
 
     @Override
@@ -118,6 +118,17 @@ public class ArchitectureDesignAgent implements StageAgent {
                                     .flatMap(c -> Checks.safe(c.relatedCriteria()).stream())
                                     .filter(id -> !known.contains(id)).distinct().toList();
                             return Result.of(unknown.isEmpty(), "all resolve", "unknown criteria: " + unknown);
+                        }),
+                new GateCriterion("DES-EXIT-4", "At least one data flow is described, and every step is a catalog or proposed component",
+                        in -> {
+                            ImpactAnalysis d = design(in);
+                            List<ImpactAnalysis.DataFlow> flows = Checks.safe(d.dataFlows());
+                            Set<String> proposed = new java.util.HashSet<>();
+                            Checks.safe(d.newComponents()).forEach(p -> proposed.add(p.name()));
+                            List<String> unknown = flows.stream().flatMap(f -> Checks.safe(f.steps()).stream())
+                                    .filter(s -> !runner.catalog().contains(s) && !proposed.contains(s)).distinct().toList();
+                            return Result.of(!flows.isEmpty() && unknown.isEmpty(), flows.size() + " data flow(s), all grounded",
+                                    flows.isEmpty() ? "no data flow described" : "unknown components in data flows: " + unknown);
                         }));
     }
 

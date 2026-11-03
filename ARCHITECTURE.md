@@ -445,8 +445,8 @@ the patch's API and schema changes").
 
 | Step | LLM mode | DETERMINISTIC_DEMO mode |
 |---|---|---|
-| Normalize, design, plan, test plan | Claude via structured outputs (record = schema) | §8's rule-based agents |
-| Patch | Model returns a `PatchProposal`: whole files plus declared API/schema changes, no commands | A **code recipe** if one matches the requirement (`click-limit`, `expired-reactivation`): anchored edits to the worktree's real source, plus an integration test and an exact contract. Otherwise a change-record document |
+| Normalize, design (impacted components and data flows), plan, test plan | Claude via structured outputs (record = schema) | §8's rule-based agents |
+| Patch | Model returns a `PatchProposal`: whole files plus declared API/schema changes, no commands | A **code recipe** if one matches the requirement (`click-limit`, `expired-reactivation`): anchored edits to the worktree's real source, plus Mockito unit tests, an integration test, the README API-reference rows, and an exact contract. Otherwise a change-record document |
 | Interface contract | `MODEL` (declared with the patch; review it against the diff) | `RECIPE` (exact), or `DERIVED_PROPOSAL` (from the design, when no code was generated) |
 | Change control | `ChangeControlPolicy`: path allowlist, protected paths need approval, file/byte caps | same |
 | Apply | Worktree of a private sandbox clone, reset to the base commit first | same |

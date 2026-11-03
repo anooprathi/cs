@@ -455,7 +455,8 @@ curl -s -i http://localhost:8080/api/v1/admin/tenants
 | PATCH  | `/api/v1/admin/tenants/{id}/domain`   | Admin key   | Set/clear a tenant's branded short-link domain — application-level association only, no DNS/TLS provisioning |
 | GET    | `/api/v1/admin/tenants/{id}/urls`     | Admin key   | Every link that tenant has created, active or not |
 | GET    | `/api/v1/admin/usage`                 | Admin key   | Platform-wide usage for the current period, broken down by tenant |
-| GET/POST | `/api/v1/agentic/**`                | Admin key   | Agentic SDLC orchestrator: requirement → reviewable artifacts + human review (see §12) |
+| GET/POST | `/api/v1/agentic/**`                | Admin key   | Agentic SDLC single-pass preview: requirement → reviewable artifacts + human review (see §12) |
+| GET/POST/PUT | `/api/v1/workflows/**`          | Admin key   | SDLC workflow orchestrator: graph runs, approvals, re-planning, worktree patches, audit, metrics (see §13) |
 
 Full interactive reference: `http://localhost:8080/swagger-ui.html` (click "Authorize" and paste your API key).
 
@@ -815,7 +816,7 @@ sample report from a real run: [`docs/agentic-sample-report.md`](docs/agentic-sa
 | Stage | Artifact | What it contains |
 |---|---|---|
 | 1. `REQUIREMENTS` | `RequirementSpec` | FR-n / NFR-n statements, given/when/then acceptance criteria (AC-n), ambiguities (AMB-n) **each with the assumption taken**, out-of-scope items |
-| 2. `IMPACT` | `ImpactAnalysis` | Which **real components of this codebase** change and why (names from `agentic/component-catalog.json`), proposed new components, notable unaffected areas |
+| 2. `IMPACT` | `ImpactAnalysis` | Which **real components of this codebase** change and why (names from `agentic/component-catalog.json`), proposed new components, **data flows** through them (entry point → service → persistence), notable unaffected areas |
 | 3. `PLAN` | `ImplementationPlan` | Tasks (T-n) with `dependsOn`, components, and the AC-n each one serves |
 | 4. `TESTS` | `TestPlan` | Test cases (TC-n) per acceptance criterion, with level and target test class (existing test files from the catalog) |
 | 5. `RISKS` | `RiskAssessment` | Risks (R-n) with severity, mitigation, and affected components |

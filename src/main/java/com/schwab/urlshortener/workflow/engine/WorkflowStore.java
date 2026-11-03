@@ -133,7 +133,9 @@ public class WorkflowStore {
             mutation.accept(task);
             return tasks.save(task);
         });
-        java.util.Objects.requireNonNull(saved, "task update returned no row");
+        if (saved == null) {
+            throw new IllegalStateException("task update returned no row");
+        }
         if (before[0].getState() != saved.getState()) {
             audit.append(AuditEntry.of(saved.getRunId(), WorkflowEvent.Type.TASK_TRANSITION)
                     .task(saved.getTaskKey(), saved.getAttempts())
@@ -204,7 +206,9 @@ public class WorkflowStore {
             taskMutation.accept(task);
             return tasks.save(task);
         });
-        java.util.Objects.requireNonNull(saved, "acceptOutputs returned no row");
+        if (saved == null) {
+            throw new IllegalStateException("acceptOutputs returned no row");
+        }
         if (before[0].getState() != saved.getState()) {
             audit.append(AuditEntry.of(saved.getRunId(), WorkflowEvent.Type.TASK_TRANSITION)
                     .task(saved.getTaskKey(), saved.getAttempts()).agent(saved.getAgentKey() + "@" + saved.getAgentVersion())

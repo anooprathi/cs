@@ -112,6 +112,12 @@ public class MarkdownRenderer {
             sb.append("### Proposed new components\n\n");
             list(sb, impact.newComponents(), p -> "`" + cell(p.name()) + "` in `" + cell(p.packageName()) + "`: " + cell(p.responsibility()));
         }
+        if (!safe(impact.dataFlows()).isEmpty()) {
+            sb.append("### Data flows\n\n");
+            list(sb, impact.dataFlows(), f -> "**" + cell(f.name()) + "**: "
+                    + safe(f.steps()).stream().map(s -> "`" + cell(s) + "`").collect(java.util.stream.Collectors.joining(" → "))
+                    + (f.description() == null ? "" : ". " + cell(f.description())));
+        }
         sb.append("### Unaffected areas\n\n");
         list(sb, impact.unaffectedAreas(), this::cell);
         return sb.toString();

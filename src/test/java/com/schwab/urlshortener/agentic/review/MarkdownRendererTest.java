@@ -45,9 +45,18 @@ class MarkdownRendererTest {
     @Test
     void emptySections_renderPlaceholders_andProposedComponentsAppear() {
         String md = renderer.render(new ImpactAnalysis(List.of(),
-                List.of(new ImpactAnalysis.ProposedComponent("XService", "com.x", "does x")), null));
+                List.of(new ImpactAnalysis.ProposedComponent("XService", "com.x", "does x")), null, null));
 
         assertThat(md).contains("_No existing component matched._").contains("`XService` in `com.x`").contains("_None._");
+        assertThat(md).doesNotContain("### Data flows");
+    }
+
+    @Test
+    void dataFlows_renderAsArrowPaths() {
+        String md = renderer.render(new ImpactAnalysis(List.of(), List.of(), List.of(),
+                List.of(new ImpactAnalysis.DataFlow("Redirect path", List.of("RedirectController", "UrlMappingRepository"), "clicks"))));
+
+        assertThat(md).contains("### Data flows").contains("**Redirect path**: `RedirectController` → `UrlMappingRepository`. clicks");
     }
 
     @Test

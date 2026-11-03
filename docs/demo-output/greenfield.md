@@ -21,13 +21,13 @@ Run **1**, mode **DETERMINISTIC_DEMO**, final status **SUCCEEDED**. Approvals in
 | Requirement normalized into testable criteria | PASS | 4 acceptance criteria, 0 ambiguities |
 | Parallel execution of independent branches | PASS | tasks that ran concurrently: [security, tests, docs]; max running at once 3 |
 | Dependency barrier: release started only after tests, security and docs succeeded | PASS | from TASK_TRANSITION order |
-| Recoverable failure: transient fault retried with backoff, then recovered | PASS | 1 retry scheduled; MTTR 56777 ms over 1 recovered incident(s) |
-| Human approval bound to the exact readiness version | PASS | #1 release APPROVED readiness-report@v1#93b8bcf57996 VALID |
-| Patch applied in an isolated git worktree and validated by approved commands | PASS | Validation command 'git-diff-check' passed (exit 0, 69 ms). |
-| Real code change: CODE patch with tests, executed by the real test command | PASS | CODE patch by recipe:click-limit (.../schwab/urlshortener/dto/ShortenUrlRequest.java /   8 +-  .../schwab/urlshortener/dto/UrlStatsResponse.java  /   4 +-  .../com/schwab/urlshortener/entity/UrlMapping.java /   4 +  .../exception/ClickLimitReachedException.java      /  10 ++  .../repository/UrlMappingRepository.java           /   2 +-  .../service/impl/CachedShortCodeLookup.java        /   4 +-  .../service/impl/UrlMappingMapper.java             /   5 +-  .../service/impl/UrlShortenerServiceImpl.java      /  10 +-  .../UrlShortenerControllerWebMvcTest.java          /  10 +-  .../integration/AdminIntegrationTest.java          /  10 +-  .../integration/ClickLimitIntegrationTest.java     / 104 +++++++++++++++++++++  .../integration/UrlShortenerIntegrationTest.java   /  36 +++----  .../service/UrlShortenerServiceImplTest.java       /  24 ++---  13 files changed, 182 insertions(+), 49 deletions(-)); runner command, exit 0, 9/9 passed; patch tests [ClickLimitIntegrationTest, UrlShortenerControllerWebMvcTest, AdminIntegrationTest, UrlShortenerIntegrationTest, UrlShortenerServiceImplTest]; command: mvn -B -o test -Dtest=ClickLimitIntegrationTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true |
+| Recoverable failure: transient fault retried with backoff, then recovered | PASS | 1 retry scheduled; MTTR 55853 ms over 1 recovered incident(s) |
+| Human approval bound to the exact readiness version | PASS | #1 release APPROVED readiness-report@v1#8f66cc54e574 VALID |
+| Patch applied in an isolated git worktree and validated by approved commands | PASS | Validation command 'git-diff-check' passed (exit 0, 141 ms). |
+| Real code change: CODE patch with tests, executed by the real test command | PASS | CODE patch by recipe:click-limit (README.md                                          /   6 +-  .../schwab/urlshortener/dto/ShortenUrlRequest.java /   8 +-  .../schwab/urlshortener/dto/UrlStatsResponse.java  /   4 +-  .../com/schwab/urlshortener/entity/UrlMapping.java /   4 +  .../exception/ClickLimitReachedException.java      /  10 ++  .../repository/UrlMappingRepository.java           /   2 +-  .../service/impl/CachedShortCodeLookup.java        /   4 +-  .../service/impl/UrlMappingMapper.java             /   5 +-  .../service/impl/UrlShortenerServiceImpl.java      /  10 +-  .../UrlShortenerControllerWebMvcTest.java          /  10 +-  .../integration/AdminIntegrationTest.java          /  10 +-  .../integration/ClickLimitIntegrationTest.java     / 104 ++++++++++++++++++  .../integration/UrlShortenerIntegrationTest.java   /  36 +++---  .../service/ClickLimitServiceTest.java             / 122 +++++++++++++++++++++  .../service/UrlShortenerServiceImplTest.java       /  24 ++--  .../impl/UrlMappingMapperClickLimitTest.java       /  38 +++++++  16 files changed, 345 insertions(+), 52 deletions(-)); runner command, exit 0, 11/11 passed; patch tests [ClickLimitIntegrationTest, ClickLimitServiceTest, UrlMappingMapperClickLimitTest, UrlShortenerControllerWebMvcTest, AdminIntegrationTest, UrlShortenerIntegrationTest, UrlShortenerServiceImplTest]; command: mvn -B -o test -Dtest=ClickLimitIntegrationTest,ClickLimitServiceTest,UrlMappingMapperClickLimitTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true |
 | Interface contract declares the API and schema (with DDL) changes | PASS | RECIPE: [POST /api/v1/urls REQUEST_FIELD_ADDED, GET /{shortCode} RESPONSE_STATUS_ADDED, GET /api/v1/urls/{shortCode}/stats RESPONSE_FIELD_ADDED]; schema [ALTER TABLE url_mapping ADD COLUMN max_clicks INTEGER NULL] |
 | Formatting-only requirement change preserved unaffected work | PASS | 5 TASK_REUSED events; re-executed after amendment: [requirements, security] |
-| Release approval still valid after re-planning (same readiness version reused) | PASS | #1 release APPROVED readiness-report@v1#93b8bcf57996 VALID |
+| Release approval still valid after re-planning (same readiness version reused) | PASS | #1 release APPROVED readiness-report@v1#8f66cc54e574 VALID |
 | Audit hash chain intact | PASS | 158 events verified: chain intact |
 
 ## Final engineering summary: run 1
@@ -43,19 +43,19 @@ Run **1**, mode **DETERMINISTIC_DEMO**, final status **SUCCEEDED**. Approvals in
 | Graph layers (parallel groups) | [[requirements], [design], [implementation], [tests, security, docs], [release]] |
 | Max tasks running at once | 3 |
 | Agent attempts / automatic retries | 10 / 1 |
-| Recovered failures (MTTR) | 1 (mean 56777 ms) |
+| Recovered failures (MTTR) | 1 (mean 55853 ms) |
 | Workspace rollbacks | 0 |
 | Injected demo faults | {tests=1} |
-| Base commit / workspace | 21d51c3f4e17 / C:\Users\rathi\AppData\Local\Temp\url-shortener-workflows\instance-20261101-213525-bfe4af13\run-1 |
-| Promotion | workflow/run-1-v1 @ e4af381822c2 |
+| Base commit / workspace | 189b6c48be70 / C:\Users\rathi\AppData\Local\Temp\url-shortener-workflows\instance-20261102-223548-dc210615\run-1 |
+| Promotion | workflow/run-1-v1 @ 11fc0840c4a5 |
 
 ### What was built
 
-- **Patch:** CODE by `recipe:click-limit`, applied in the isolated worktree (13 files changed, 182 insertions(+), 49 deletions(-)). Add optional per-link click limits (maxClicks): 410 Gone once reached, remainingClicks on stats; 40 existing test call sites updated by codemod
+- **Patch:** CODE by `recipe:click-limit`, applied in the isolated worktree (16 files changed, 345 insertions(+), 52 deletions(-)). Add optional per-link click limits (maxClicks): 410 Gone once reached, remainingClicks on stats; 40 existing test call sites updated by codemod
 - **Provenance:** DETERMINISTIC_DEMO code recipe 'click-limit': a pre-authored, rule-based code change applied to the worktree's actual source. Real code and tests, NOT AI-generated.
-- **Tests in the patch:** `src/test/java/com/schwab/urlshortener/integration/ClickLimitIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java`, `src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/service/UrlShortenerServiceImplTest.java`
-- **Test execution:** runner `command`, product tests executed: **yes**, 9/9 passed, command `mvn -B -o test -Dtest=ClickLimitIntegrationTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` exit 0.
-- **JUnit totals reported by the command:** `Tests run: 106, Failures: 0, Errors: 0, Skipped: 0`
+- **Tests in the patch:** `src/test/java/com/schwab/urlshortener/integration/ClickLimitIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/service/ClickLimitServiceTest.java`, `src/test/java/com/schwab/urlshortener/service/impl/UrlMappingMapperClickLimitTest.java`, `src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java`, `src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java`, `src/test/java/com/schwab/urlshortener/service/UrlShortenerServiceImplTest.java`
+- **Test execution:** runner `command`, product tests executed: **yes**, 11/11 passed, command `mvn -B -o test -Dtest=ClickLimitIntegrationTest,ClickLimitServiceTest,UrlMappingMapperClickLimitTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true` exit 0.
+- **JUnit totals reported by the command:** `Tests run: 113, Failures: 0, Errors: 0, Skipped: 0`
 - **Interface contract (RECIPE):** POST `/api/v1/urls` REQUEST_FIELD_ADDED; GET `/{shortCode}` RESPONSE_STATUS_ADDED; GET `/api/v1/urls/{shortCode}/stats` RESPONSE_FIELD_ADDED; `ALTER TABLE url_mapping ADD COLUMN max_clicks INTEGER NULL`
 
 ### Plan and rationale
@@ -81,16 +81,42 @@ Key decisions (as recorded by each stage's agent):
 - `requirements`: Produced by deterministic-demo. _Why:_ Execution mode of the run.
 - `design`: Impacted: UrlMapping (MODIFY), UrlShortenerServiceImpl (MODIFY), CachedShortCodeLookup (MODIFY), GlobalExceptionHandler (EXTEND), RedirectController (EXTEND), UrlShortenerController (EXTEND), UrlDtos (EXTEND), SecurityConfig (MODIFY). _Why:_ Matched against the curated component catalog of this repository.
 - `design`: Produced by deterministic-demo. _Why:_ Execution mode of the run.
-- `implementation`: Patch scoped to 13 file(s). _Why:_ Change control limits patches to [docs/**, src/main/java/**, src/test/java/**, README.md].
-- `implementation`: Applied in an isolated worktree at base 21d51c3f4e. _Why:_ The source repository is never written; workspace state is derived from this patch's diff.
+- `implementation`: Patch scoped to 16 file(s). _Why:_ Change control limits patches to [docs/**, src/main/java/**, src/test/java/**, README.md].
+- `implementation`: Applied in an isolated worktree at base 189b6c48be. _Why:_ The source repository is never written; workspace state is derived from this patch's diff.
 - `implementation`: Plan by deterministic-demo; patch by deterministic-demo (recipe:click-limit). _Why:_ A deterministic demo code recipe matched the requirement and applied cleanly.
 - `docs`: Deterministic documentation assembly. _Why:_ Documentation projects reviewed artifacts; generating it with a model would add unreviewed content.
 - `security`: Evaluated rules [POL-SECRET, POL-SCOPE, POL-AUTHZ, POL-PROTECTED, POL-TENANT, POL-PII]. _Why:_ Rules are configured in app.workflow.policy.* and are deterministic in every mode.
 - `security`: Risks by deterministic-demo. _Why:_ Execution mode of the run.
-- `tests`: Executed with runner 'command', including patch tests [src/test/java/com/schwab/urlshortener/integration/ClickLimitIntegrationTest.java, src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java, src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java, src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java, src/test/java/com/schwab/urlshortener/service/UrlShortenerServiceImplTest.java]. _Why:_ The run's testExecution (COMMAND); commands come only from configuration, never from the plan.
+- `tests`: Executed with runner 'command', including patch tests [src/test/java/com/schwab/urlshortener/integration/ClickLimitIntegrationTest.java, src/test/java/com/schwab/urlshortener/service/ClickLimitServiceTest.java, src/test/java/com/schwab/urlshortener/service/impl/UrlMappingMapperClickLimitTest.java, src/test/java/com/schwab/urlshortener/controller/UrlShortenerControllerWebMvcTest.java, src/test/java/com/schwab/urlshortener/integration/AdminIntegrationTest.java, src/test/java/com/schwab/urlshortener/integration/UrlShortenerIntegrationTest.java, src/test/java/com/schwab/urlshortener/service/UrlShortenerServiceImplTest.java]. _Why:_ The run's testExecution (COMMAND); commands come only from configuration, never from the plan.
 - `tests`: Test plan by deterministic-demo. _Why:_ Execution mode of the run.
 - `release`: ready=true. _Why:_ Derived only from blocking checks RR-1..RR-5.
 - `release`: Human approval required before promotion. _Why:_ Promotion is a high-impact action; the agent never promotes.
+
+### Validation
+
+| Task | State | Exit gate | Failed criteria |
+|---|---|---|---|
+| requirements | SUCCEEDED | passed 4/4 |  |
+| design | SUCCEEDED | passed 4/4 |  |
+| implementation | SUCCEEDED | passed 7/7 |  |
+| tests | SUCCEEDED | passed 3/3 |  |
+| security | SUCCEEDED | passed 2/2 |  |
+| docs | SUCCEEDED | passed 3/3 |  |
+| release | SUCCEEDED | passed 1/1 |  |
+
+Release readiness (**ready**):
+
+| Check | Blocking | Result | Detail |
+|---|---|---|---|
+| RR-1 All executed test cases passed | yes | pass | 11/11 passed via 'command' |
+| RR-2 No BLOCKER policy violations | yes | pass | 0 blocker(s), 1 warning(s) |
+| RR-3 Every acceptance criterion is documented and traced | yes | pass | all traced |
+| RR-4 No HIGH risk lacks a mitigation | yes | pass | 0 unmitigated |
+| RR-5 The patch passed change control and every validation command | yes | pass | 1 validation command(s); 0 violation(s) |
+| RR-6 Product test suite actually executed | advisory | pass | executed by 'command' |
+| RR-7 No open assumptions | advisory | pass | 0 assumption(s) were approved, not confirmed by the requirement owner |
+| RR-8 No policy warnings | advisory | **FAIL** | 1 warning(s) |
+| RR-9 The patch is product code (not a demo change record) | advisory | pass | CODE patch by recipe:click-limit: DETERMINISTIC_DEMO code recipe 'click-limit': a pre-authored, rule-based code change applied to the worktree's actual source. Real code and tests, NOT AI-generated. |
 
 ### Risks and trade-offs
 
@@ -124,24 +150,24 @@ Stated by agents:
 | Task | Stage | State | Attempts | Retries | Reused | Fallback | Outputs |
 |---|---|---|---:|---:|---|---|---|
 | requirements | REQUIREMENT_ANALYSIS | SUCCEEDED | 2 | 0 |  |  | requirement-spec@v2#1f1937ee07e6 |
-| design | ARCHITECTURE_DESIGN | SUCCEEDED | 1 | 0 | yes |  | architecture-design@v1#3391f2e63913 |
-| implementation | IMPLEMENTATION | SUCCEEDED | 1 | 0 | yes |  | implementation-plan@v1#7b233189c320, change-patch@v1#db5c0acf9c18, interface-contract@v1#b7e81a45597e |
-| tests | TEST_GENERATION_AND_EXECUTION | SUCCEEDED | 2 | 1 | yes |  | test-plan@v1#07659b39bf3e, test-report@v1#9fed7ef5411f |
+| design | ARCHITECTURE_DESIGN | SUCCEEDED | 1 | 0 | yes |  | architecture-design@v1#e4d14d985b99 |
+| implementation | IMPLEMENTATION | SUCCEEDED | 1 | 0 | yes |  | implementation-plan@v1#7b233189c320, change-patch@v1#83d623d48170, interface-contract@v1#b7e81a45597e |
+| tests | TEST_GENERATION_AND_EXECUTION | SUCCEEDED | 2 | 1 | yes |  | test-plan@v1#07659b39bf3e, test-report@v1#9cd41d0faf74 |
 | security | SECURITY_POLICY_VALIDATION | SUCCEEDED | 2 | 0 |  |  | risk-assessment@v2#355696f2ebaa, policy-report@v2#efe77dcc4499 |
 | docs | DOCUMENTATION | SUCCEEDED | 1 | 0 | yes |  | documentation@v1#63886657aebf |
-| release | RELEASE_READINESS | SUCCEEDED | 1 | 0 | yes |  | readiness-report@v1#93b8bcf57996 |
+| release | RELEASE_READINESS | SUCCEEDED | 1 | 0 | yes |  | readiness-report@v1#8f66cc54e574 |
 
 ### Human decisions
 
 | # | Task | Bound to | Decision | Reviewer | At | Status |
 |---:|---|---|---|---|---|---|
-| 1 | release | readiness-report@v1#93b8bcf57996 | APPROVED | scenario-reviewer (scripted) | 2026-11-02T03:36:33.283488Z | VALID |
+| 1 | release | readiness-report@v1#8f66cc54e574 | APPROVED | scenario-reviewer (scripted) | 2026-11-03T04:36:57.094878Z | VALID |
 
 ### Notable events
 
-- `#57` **TASK_RETRY_SCHEDULED** `tests`: Retrying after 200 ms (attempt 2 of 3).
+- `#56` **TASK_RETRY_SCHEDULED** `tests`: Retrying after 200 ms (attempt 2 of 3).
 - `#92` **APPROVED** `release`: Approved by scenario-reviewer (scripted): Release readiness checklist reviewed
-- `#97` **PATCH_PROMOTED**: Promoted change-patch@v1#db5c0acf9c18 to local branch workflow/run-1-v1 (e4af381822c2) in the sandbox clone. Not pushed, not merged into the source repository, not deployed.
+- `#97` **PATCH_PROMOTED**: Promoted change-patch@v1#83d623d48170 to local branch workflow/run-1-v1 (11fc0840c4a5) in the sandbox clone. Not pushed, not merged into the source repository, not deployed.
 - `#98` **REQUIREMENT_UPDATED**: Requirement amended to revision 2 by scenario-reviewer (scripted): Reformat the requirement as a bulleted list (no content change).. Resume to re-plan affected stages.
 - `#100` **TASK_INVALIDATED** `requirements`: Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.
 - `#102` **TASK_INVALIDATED** `security`: Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.)
@@ -150,17 +176,17 @@ Stated by agents:
 - `#108` **TASK_INVALIDATED** `release`: Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.)
 - `#110` **TASK_INVALIDATED** `design`: Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.)
 - `#112` **TASK_INVALIDATED** `implementation`: Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.)
-- `#128` **TASK_REUSED** `design`: Inputs unchanged (fingerprint 7a1ef4f8d97d): reusing architecture-design@v1 from attempt 1 without re-executing.
-- `#132` **TASK_REUSED** `implementation`: Inputs unchanged (fingerprint 64200a575a33): reusing implementation-plan@v1 from attempt 1, change-patch@v1 from attempt 1, interface-contract@v1 from attempt 1 without re-executing.
-- `#140` **TASK_REUSED** `tests`: Inputs unchanged (fingerprint 10bddf946c0a): reusing test-plan@v1 from attempt 2, test-report@v1 from attempt 2 without re-executing.
-- `#146` **TASK_REUSED** `docs`: Inputs unchanged (fingerprint 8627faaebd95): reusing documentation@v1 from attempt 1 without re-executing.
-- `#156` **TASK_REUSED** `release`: Inputs unchanged (fingerprint ca2deb2027dc): reusing readiness-report@v1 from attempt 1 without re-executing; its approval is still valid for that exact version.
+- `#128` **TASK_REUSED** `design`: Inputs unchanged (fingerprint 4bad783f1d2d): reusing architecture-design@v1 from attempt 1 without re-executing.
+- `#132` **TASK_REUSED** `implementation`: Inputs unchanged (fingerprint 296628609870): reusing implementation-plan@v1 from attempt 1, change-patch@v1 from attempt 1, interface-contract@v1 from attempt 1 without re-executing.
+- `#140` **TASK_REUSED** `tests`: Inputs unchanged (fingerprint adc959233cff): reusing test-plan@v1 from attempt 2, test-report@v1 from attempt 2 without re-executing.
+- `#146` **TASK_REUSED** `docs`: Inputs unchanged (fingerprint 9361b5bbcb9d): reusing documentation@v1 from attempt 1 without re-executing.
+- `#156` **TASK_REUSED** `release`: Inputs unchanged (fingerprint fcdd85cf3c62): reusing readiness-report@v1 from attempt 1 without re-executing; its approval is still valid for that exact version.
 
-### What this run did NOT do
+### Limitations (what this run did NOT do)
 
 - It did not merge, push, or deploy anything. Promotion (if shown) is a local branch in the orchestrator's sandbox clone.
 - No language model was called. The code came from a pre-authored deterministic recipe (`recipe:click-limit`); it is not AI-generated and only exists for requirements a recipe recognizes.
-- Only the targeted test classes ran (`mvn -B -o test -Dtest=ClickLimitIntegrationTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`), not the full suite with its coverage gate; run `mvn clean verify` on the promoted branch before merging.
+- Only the targeted test classes ran (`mvn -B -o test -Dtest=ClickLimitIntegrationTest,ClickLimitServiceTest,UrlMappingMapperClickLimitTest,UrlShortenerControllerWebMvcTest,AdminIntegrationTest,UrlShortenerIntegrationTest,UrlShortenerServiceImplTest -Dsurefire.failIfNoSpecifiedTests=false -Djacoco.skip=true`), not the full suite with its coverage gate; run `mvn clean verify` on the promoted branch before merging.
 
 # Execution timeline: run 1 (Greenfield: click-limited short links)
 
@@ -169,162 +195,162 @@ Stated by agents:
 Status **SUCCEEDED**, requirement revision 2, 3 drive(s), 158 audit events. Max tasks RUNNING at once: **3**.
 
 ```
-task            |------------------------------------------------| 0 .. 64539 ms
-requirements    | ██                                            █|
-design          |  █                                             |
-implementation  |  ███                                           |
-tests           |    ███████████████████████████████████████████ |
-security        |    █                                          █|
-docs            |    █                                           |
+task            |------------------------------------------------| 0 .. 66618 ms
+requirements    |  █                                            █|
+design          |  ██                                            |
+implementation  |   ███                                          |
+tests           |     ██████████████████████████████████████████ |
+security        |     ██                                        █|
+docs            |     █                                          |
 release         |                                              ◆ |
 ```
 _█ = RUNNING (executing an attempt), ◆ = paused for human approval._
 
 | +ms | # | task | event | transition | actor | detail |
 |---:|---:|---|---|---|---|---|
-| 82 | 1 |  | RUN_CREATED |  | api | Run created: 'Greenfield: click-limited short links' (DETERMINISTIC_DEMO, 7 tasks, injected demo faults {tests=1}). |
-| 207 | 2 |  | RUN_STARTED |  | engine | Drive #1 (START), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 2543 | 3 |  | WORKSPACE_CREATED |  | engine | Isolated worktree run-1 created at base commit 21d51c3f4e17 in the orchestrator's sandbox clone; the source repository is not modified. |
-| 2565 | 5 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
-| 2579 | 6 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 2584 | 7 | requirements | TASK_STARTED |  | engine | Fingerprint 54cb965a5eda; inputs []. |
-| 2645 | 8 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
-| 2653 | 9 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 3032 | 10 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v1 (DETERMINISTIC_DEMO) produced from []. |
-| 3037 | 11 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 4 functional and 0 non-functional statements with 4 acceptance criteria. |
-| 3046 | 12 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
-| 3058 | 13 | requirements | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 3067 | 14 | requirements | TASK_SUCCEEDED |  | engine | Accepted requirement-spec. |
-| 3078 | 16 | design | TASK_TRANSITION | PENDING → READY | engine |  |
-| 3086 | 17 | design | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 3089 | 18 | design | TASK_STARTED |  | engine | Fingerprint 7a1ef4f8d97d; inputs [requirement-spec@v1]. |
-| 3110 | 19 | design | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DES-ENTRY-1 ok |
-| 3116 | 20 | design | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 3372 | 21 | design | ARTIFACT_STORED |  | engine | architecture-design@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1]. |
-| 3376 | 22 | design | AGENT_RESULT |  | engine | Design touches 8 existing components and proposes 0 new ones. |
-| 3384 | 23 | design | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DES-EXIT-1 ok; DES-EXIT-2 ok; DES-EXIT-3 ok |
-| 3393 | 24 | design | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 3397 | 25 | design | TASK_SUCCEEDED |  | engine | Accepted architecture-design. |
-| 3408 | 27 | implementation | TASK_TRANSITION | PENDING → READY | engine |  |
-| 3417 | 28 | implementation | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 3420 | 29 | implementation | TASK_STARTED |  | engine | Fingerprint 64200a575a33; inputs [requirement-spec@v1, architecture-design@v1]. |
-| 3438 | 30 | implementation | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: IMP-ENTRY-1 ok |
-| 3443 | 31 | implementation | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 5663 | 32 | implementation | ARTIFACT_STORED |  | engine | implementation-plan@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1, architecture-design@v1]. |
-| 5707 | 33 | implementation | ARTIFACT_STORED |  | engine | change-patch@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1, architecture-design@v1]. |
-| 5731 | 34 | implementation | ARTIFACT_STORED |  | engine | interface-contract@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1, architecture-design@v1]. |
-| 5734 | 35 | implementation | WORKSPACE_PATCH_APPLIED |  | engine | Patch applied in the isolated worktree at base 21d51c3f4e17:  13 files changed, 182 insertions(+), 49 deletions(-) |
-| 5738 | 36 | implementation | VALIDATION_COMMAND |  | engine | Validation command 'git-diff-check' passed (exit 0, 69 ms). |
-| 5740 | 37 | implementation | AGENT_RESULT |  | engine | Planned 11 tasks and produced a workspace-applied CODE patch (recipe:click-limit) touching 13 file(s) with 5 test file(s); contract RECIPE: 3 API, 1 schema change(s). |
-| 5749 | 38 | implementation | EXIT_GATE_PASSED |  | engine | EXIT gate passed: IMP-EXIT-1 ok; IMP-EXIT-2 ok; IMP-EXIT-3 ok; IMP-EXIT-4 ok; IMP-EXIT-5 ok; IMP-EXIT-6 ok; IMP-EXIT-7 ok |
-| 5771 | 39 | implementation | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 5777 | 40 | implementation | TASK_SUCCEEDED |  | engine | Accepted implementation-plan, change-patch, interface-contract. |
-| 5788 | 42 | tests | TASK_TRANSITION | PENDING → READY | engine |  |
-| 5799 | 44 | security | TASK_TRANSITION | PENDING → READY | engine |  |
-| 5807 | 46 | docs | TASK_TRANSITION | PENDING → READY | engine |  |
-| 5816 | 47 | tests | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 5819 | 48 | tests | TASK_STARTED |  | engine | Fingerprint 10bddf946c0a; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
-| 5830 | 49 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 5834 | 50 | security | TASK_STARTED |  | engine | Fingerprint d280ff2c8357; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
-| 5853 | 51 | tests | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: TST-ENTRY-1 ok |
-| 5862 | 52 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 5866 | 53 | tests | TASK_ATTEMPT_FAILED |  | engine | TRANSIENT: Injected fault (demo, configured at run creation): attempt 1 of 1 scheduled transient failures |
-| 5869 | 54 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
-| 5872 | 55 | docs | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 5873 | 56 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 5875 | 57 | tests | TASK_RETRY_SCHEDULED |  | engine | Retrying after 200 ms (attempt 2 of 3). |
-| 5877 | 58 | docs | TASK_STARTED |  | engine | Fingerprint 8627faaebd95; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1]. |
-| 5887 | 59 | docs | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DOC-ENTRY-1 ok |
-| 5892 | 60 | docs | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 5924 | 61 | docs | ARTIFACT_STORED |  | engine | documentation@v1 (DETERMINISTIC) produced from [implementation-plan@v1, requirement-spec@v1, architecture-design@v1]. |
-| 5926 | 62 | docs | AGENT_RESULT |  | engine | Documented 8 component changes and traced 4 acceptance criteria. |
-| 5932 | 63 | docs | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DOC-EXIT-1 ok; DOC-EXIT-2 ok; DOC-EXIT-3 ok |
-| 5940 | 64 | docs | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 5945 | 65 | docs | TASK_SUCCEEDED |  | engine | Accepted documentation. |
-| 6084 | 66 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 2 of at most 3 in this drive. |
-| 6086 | 67 | security | ARTIFACT_STORED |  | engine | risk-assessment@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 6103 | 68 | security | ARTIFACT_STORED |  | engine | policy-report@v1 (DETERMINISTIC) produced from [requirement-spec@v1, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 6105 | 69 | security | AGENT_RESULT |  | engine | Assessed 4 risks; policy check found 0 blocker(s) and 1 warning(s). |
-| 6110 | 70 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
-| 6121 | 71 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 6125 | 72 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
-| 62560 | 73 | tests | ARTIFACT_STORED |  | engine | test-plan@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 62616 | 74 | tests | ARTIFACT_STORED |  | engine | test-report@v1 (EXTERNAL_COMMAND) produced from [requirement-spec@v1, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 62620 | 75 | tests | AGENT_RESULT |  | engine | Generated 5 test cases and executed them with 'command': 9 passed, 0 failed, 1 not executed. |
-| 62634 | 76 | tests | EXIT_GATE_PASSED |  | engine | EXIT gate passed: TST-EXIT-1 ok; TST-EXIT-2 ok; TST-EXIT-3 ok |
-| 62643 | 77 | tests | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 62647 | 78 | tests | TASK_SUCCEEDED |  | engine | Accepted test-plan, test-report. |
-| 62656 | 80 | release | TASK_TRANSITION | PENDING → READY | engine |  |
-| 62665 | 81 | release | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 62668 | 82 | release | TASK_STARTED |  | engine | Fingerprint ca2deb2027dc; inputs [requirement-spec@v1, implementation-plan@v1, change-patch@v1, test-report@v1, policy-report@v1, risk-assessment@v1, documentation@v1]. |
-| 62697 | 83 | release | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REL-ENTRY-1 ok; REL-ENTRY-2 ok |
-| 62702 | 84 | release | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 62767 | 85 | release | ARTIFACT_STORED |  | engine | readiness-report@v1 (DETERMINISTIC) produced from [change-patch@v1, policy-report@v1, test-report@v1, requirement-spec@v1, implementation-plan@v1, documentation@v1, risk-assessment@v1]. |
-| 62771 | 86 | release | AGENT_RESULT |  | engine | All blocking checks passed across 11 planned tasks; 1 advisory item(s) for the approver to weigh. Approving this version approves change-patch@v1#db5c0acf9c18. |
-| 62776 | 87 | release | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REL-EXIT-1 ok |
-| 62785 | 88 | release | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
-| 62791 | 89 | release | APPROVAL_REQUESTED |  | engine | Human approval required: approval checkpoint required for task 'release' |
-| 62802 | 90 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [release]. |
-| 62810 | 91 |  | RUN_DRIVE_ENDED |  | engine | Drive START ended with run WAITING_APPROVAL after 62631 ms. |
-| 62907 | 92 | release | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Release readiness checklist reviewed |
-| 62914 | 93 | release | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
-| 62924 | 94 |  | RUN_CONTINUED |  | engine | Drive #2 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 62932 | 95 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
-| 62935 | 96 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run SUCCEEDED after 18 ms. |
-| 63888 | 97 |  | PATCH_PROMOTED |  | scenario-reviewer (scripted) | Promoted change-patch@v1#db5c0acf9c18 to local branch workflow/run-1-v1 (e4af381822c2) in the sandbox clone. Not pushed, not merged into the source repository, not deployed. |
-| 63901 | 98 |  | REQUIREMENT_UPDATED |  | scenario-reviewer (scripted) | Requirement amended to revision 2 by scenario-reviewer (scripted): Reformat the requirement as a bulleted list (no content change).. Resume to re-plan affected stages. |
-| 63910 | 99 |  | RUN_RESUMED |  | engine | Drive #3 (RESUME), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
-| 63914 | 100 | requirements | TASK_INVALIDATED |  | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
-| 63917 | 101 | requirements | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
-| 63919 | 102 | security | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63923 | 103 | security | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63924 | 104 | tests | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63927 | 105 | tests | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63929 | 106 | docs | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63932 | 107 | docs | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63934 | 108 | release | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63937 | 109 | release | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63939 | 110 | design | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63942 | 111 | design | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63944 | 112 | implementation | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63947 | 113 | implementation | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 63953 | 115 | requirements | TASK_TRANSITION | INVALIDATED → READY | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
-| 63958 | 116 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 63960 | 117 | requirements | TASK_STARTED |  | engine | Fingerprint 1b1748d92e4a; inputs []. |
-| 63965 | 118 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
-| 63968 | 119 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 64160 | 120 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v2 (DETERMINISTIC_DEMO) produced from []. |
-| 64164 | 121 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 4 functional and 0 non-functional statements with 4 acceptance criteria. |
-| 64174 | 122 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
-| 64182 | 123 | requirements | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 64187 | 124 | requirements | TASK_SUCCEEDED |  | engine | Accepted requirement-spec. |
-| 64199 | 126 | design | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64222 | 127 | design | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
-| 64225 | 128 | design | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 7a1ef4f8d97d): reusing architecture-design@v1 from attempt 1 without re-executing. |
-| 64235 | 130 | implementation | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64243 | 131 | implementation | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
-| 64245 | 132 | implementation | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 64200a575a33): reusing implementation-plan@v1 from attempt 1, change-patch@v1 from attempt 1, interface-contract@v1 from attempt 1 without re-executing. |
-| 64252 | 134 | tests | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64259 | 136 | security | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64266 | 138 | docs | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64274 | 139 | tests | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
-| 64277 | 140 | tests | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 10bddf946c0a): reusing test-plan@v1 from attempt 2, test-report@v1 from attempt 2 without re-executing. |
-| 64283 | 141 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
-| 64285 | 142 | security | TASK_STARTED |  | engine | Fingerprint 9976840460db; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
-| 64291 | 143 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
-| 64293 | 144 | docs | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
-| 64295 | 145 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
-| 64297 | 146 | docs | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 8627faaebd95): reusing documentation@v1 from attempt 1 without re-executing. |
-| 64483 | 147 | security | ARTIFACT_STORED |  | engine | risk-assessment@v2 (DETERMINISTIC_DEMO) produced from [requirement-spec@v2, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 64492 | 148 | security | ARTIFACT_STORED |  | engine | policy-report@v2 (DETERMINISTIC) produced from [requirement-spec@v2, implementation-plan@v1, change-patch@v1, architecture-design@v1]. |
-| 64494 | 149 | security | AGENT_RESULT |  | engine | Assessed 4 risks; policy check found 0 blocker(s) and 1 warning(s). |
-| 64498 | 150 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
-| 64506 | 151 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
-| 64509 | 152 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
-| 64515 | 154 | release | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
-| 64525 | 155 | release | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
-| 64527 | 156 | release | TASK_REUSED |  | engine | Inputs unchanged (fingerprint ca2deb2027dc): reusing readiness-report@v1 from attempt 1 without re-executing; its approval is still valid for that exact version. |
-| 64536 | 157 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
-| 64539 | 158 |  | RUN_DRIVE_ENDED |  | engine | Drive RESUME ended with run SUCCEEDED after 630 ms. |
+| 239 | 1 |  | RUN_CREATED |  | api | Run created: 'Greenfield: click-limited short links' (DETERMINISTIC_DEMO, 7 tasks, injected demo faults {tests=1}). |
+| 507 | 2 |  | RUN_STARTED |  | engine | Drive #1 (START), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 3279 | 3 |  | WORKSPACE_CREATED |  | engine | Isolated worktree run-1 created at base commit 189b6c48be70 in the orchestrator's sandbox clone; the source repository is not modified. |
+| 3304 | 5 | requirements | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3332 | 6 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3340 | 7 | requirements | TASK_STARTED |  | engine | Fingerprint 54cb965a5eda; inputs []. |
+| 3388 | 8 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
+| 3407 | 9 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 3906 | 10 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v1 (DETERMINISTIC_DEMO) produced from []. |
+| 3914 | 11 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 4 functional and 0 non-functional statements with 4 acceptance criteria. |
+| 3934 | 12 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
+| 3949 | 13 | requirements | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 3959 | 14 | requirements | TASK_SUCCEEDED |  | engine | Accepted requirement-spec. |
+| 3971 | 16 | design | TASK_TRANSITION | PENDING → READY | engine |  |
+| 3983 | 17 | design | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 3987 | 18 | design | TASK_STARTED |  | engine | Fingerprint 4bad783f1d2d; inputs [requirement-spec@v1]. |
+| 4008 | 19 | design | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DES-ENTRY-1 ok |
+| 4015 | 20 | design | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 4338 | 21 | design | ARTIFACT_STORED |  | engine | architecture-design@v1 (DETERMINISTIC_DEMO) produced from [requirement-spec@v1]. |
+| 4344 | 22 | design | AGENT_RESULT |  | engine | Design touches 8 existing components and proposes 0 new ones. |
+| 4359 | 23 | design | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DES-EXIT-1 ok; DES-EXIT-2 ok; DES-EXIT-3 ok; DES-EXIT-4 ok |
+| 4374 | 24 | design | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 4380 | 25 | design | TASK_SUCCEEDED |  | engine | Accepted architecture-design. |
+| 4391 | 27 | implementation | TASK_TRANSITION | PENDING → READY | engine |  |
+| 4403 | 28 | implementation | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 4406 | 29 | implementation | TASK_STARTED |  | engine | Fingerprint 296628609870; inputs [requirement-spec@v1, architecture-design@v1]. |
+| 4431 | 30 | implementation | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: IMP-ENTRY-1 ok |
+| 4436 | 31 | implementation | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 7976 | 32 | implementation | ARTIFACT_STORED |  | engine | implementation-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v1]. |
+| 8014 | 33 | implementation | ARTIFACT_STORED |  | engine | change-patch@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v1]. |
+| 8037 | 34 | implementation | ARTIFACT_STORED |  | engine | interface-contract@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, requirement-spec@v1]. |
+| 8039 | 35 | implementation | WORKSPACE_PATCH_APPLIED |  | engine | Patch applied in the isolated worktree at base 189b6c48be70:  16 files changed, 345 insertions(+), 52 deletions(-) |
+| 8043 | 36 | implementation | VALIDATION_COMMAND |  | engine | Validation command 'git-diff-check' passed (exit 0, 141 ms). |
+| 8046 | 37 | implementation | AGENT_RESULT |  | engine | Planned 11 tasks and produced a workspace-applied CODE patch (recipe:click-limit) touching 16 file(s) with 7 test file(s); contract RECIPE: 3 API, 1 schema change(s). |
+| 8056 | 38 | implementation | EXIT_GATE_PASSED |  | engine | EXIT gate passed: IMP-EXIT-1 ok; IMP-EXIT-2 ok; IMP-EXIT-3 ok; IMP-EXIT-4 ok; IMP-EXIT-5 ok; IMP-EXIT-6 ok; IMP-EXIT-7 ok |
+| 8079 | 39 | implementation | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 8086 | 40 | implementation | TASK_SUCCEEDED |  | engine | Accepted implementation-plan, change-patch, interface-contract. |
+| 8103 | 42 | tests | TASK_TRANSITION | PENDING → READY | engine |  |
+| 8120 | 44 | security | TASK_TRANSITION | PENDING → READY | engine |  |
+| 8131 | 46 | docs | TASK_TRANSITION | PENDING → READY | engine |  |
+| 8146 | 47 | tests | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 8150 | 48 | tests | TASK_STARTED |  | engine | Fingerprint adc959233cff; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
+| 8170 | 49 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 8175 | 50 | tests | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: TST-ENTRY-1 ok |
+| 8183 | 51 | security | TASK_STARTED |  | engine | Fingerprint ee65c8ccd780; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
+| 8188 | 52 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 8194 | 53 | tests | TASK_ATTEMPT_FAILED |  | engine | TRANSIENT: Injected fault (demo, configured at run creation): attempt 1 of 1 scheduled transient failures |
+| 8199 | 54 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
+| 8205 | 55 | docs | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 8210 | 56 | tests | TASK_RETRY_SCHEDULED |  | engine | Retrying after 200 ms (attempt 2 of 3). |
+| 8215 | 57 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 8220 | 58 | docs | TASK_STARTED |  | engine | Fingerprint 9361b5bbcb9d; inputs [requirement-spec@v1, architecture-design@v1, implementation-plan@v1]. |
+| 8236 | 59 | docs | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: DOC-ENTRY-1 ok |
+| 8245 | 60 | docs | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 8302 | 61 | docs | ARTIFACT_STORED |  | engine | documentation@v1 (DETERMINISTIC) produced from [architecture-design@v1, requirement-spec@v1, implementation-plan@v1]. |
+| 8306 | 62 | docs | AGENT_RESULT |  | engine | Documented 8 component changes and traced 4 acceptance criteria. |
+| 8314 | 63 | docs | EXIT_GATE_PASSED |  | engine | EXIT gate passed: DOC-EXIT-1 ok; DOC-EXIT-2 ok; DOC-EXIT-3 ok |
+| 8325 | 64 | docs | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 8332 | 65 | docs | TASK_SUCCEEDED |  | engine | Accepted documentation. |
+| 8424 | 66 | tests | TASK_ATTEMPT_STARTED |  | engine | Attempt 2 of at most 3 in this drive. |
+| 8553 | 67 | security | ARTIFACT_STORED |  | engine | risk-assessment@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v1]. |
+| 8596 | 68 | security | ARTIFACT_STORED |  | engine | policy-report@v1 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v1]. |
+| 8601 | 69 | security | AGENT_RESULT |  | engine | Assessed 4 risks; policy check found 0 blocker(s) and 1 warning(s). |
+| 8612 | 70 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
+| 8631 | 71 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 8638 | 72 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
+| 63961 | 73 | tests | ARTIFACT_STORED |  | engine | test-plan@v1 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v1]. |
+| 64009 | 74 | tests | ARTIFACT_STORED |  | engine | test-report@v1 (EXTERNAL_COMMAND) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v1]. |
+| 64013 | 75 | tests | AGENT_RESULT |  | engine | Generated 5 test cases and executed them with 'command': 11 passed, 0 failed, 1 not executed. |
+| 64033 | 76 | tests | EXIT_GATE_PASSED |  | engine | EXIT gate passed: TST-EXIT-1 ok; TST-EXIT-2 ok; TST-EXIT-3 ok |
+| 64047 | 77 | tests | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 64052 | 78 | tests | TASK_SUCCEEDED |  | engine | Accepted test-plan, test-report. |
+| 64059 | 80 | release | TASK_TRANSITION | PENDING → READY | engine |  |
+| 64071 | 81 | release | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 64074 | 82 | release | TASK_STARTED |  | engine | Fingerprint fcdd85cf3c62; inputs [requirement-spec@v1, implementation-plan@v1, change-patch@v1, test-report@v1, policy-report@v1, risk-assessment@v1, documentation@v1]. |
+| 64105 | 83 | release | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REL-ENTRY-1 ok; REL-ENTRY-2 ok |
+| 64110 | 84 | release | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 64184 | 85 | release | ARTIFACT_STORED |  | engine | readiness-report@v1 (DETERMINISTIC) produced from [risk-assessment@v1, documentation@v1, implementation-plan@v1, requirement-spec@v1, test-report@v1, policy-report@v1, change-patch@v1]. |
+| 64187 | 86 | release | AGENT_RESULT |  | engine | All blocking checks passed across 11 planned tasks; 1 advisory item(s) for the approver to weigh. Approving this version approves change-patch@v1#83d623d48170. |
+| 64193 | 87 | release | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REL-EXIT-1 ok |
+| 64200 | 88 | release | TASK_TRANSITION | RUNNING → WAITING_APPROVAL | engine |  |
+| 64206 | 89 | release | APPROVAL_REQUESTED |  | engine | Human approval required: approval checkpoint required for task 'release' |
+| 64217 | 90 |  | RUN_WAITING_APPROVAL |  | engine | Waiting for a human decision on [release]. |
+| 64223 | 91 |  | RUN_DRIVE_ENDED |  | engine | Drive START ended with run WAITING_APPROVAL after 63782 ms. |
+| 64291 | 92 | release | APPROVED |  | scenario-reviewer (scripted) | Approved by scenario-reviewer (scripted): Release readiness checklist reviewed |
+| 64299 | 93 | release | TASK_TRANSITION | WAITING_APPROVAL → SUCCEEDED | scenario-reviewer (scripted) |  |
+| 64307 | 94 |  | RUN_CONTINUED |  | engine | Drive #2 (CONTINUE), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 64319 | 95 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
+| 64323 | 96 |  | RUN_DRIVE_ENDED |  | engine | Drive CONTINUE ended with run SUCCEEDED after 19 ms. |
+| 65817 | 97 |  | PATCH_PROMOTED |  | scenario-reviewer (scripted) | Promoted change-patch@v1#83d623d48170 to local branch workflow/run-1-v1 (11fc0840c4a5) in the sandbox clone. Not pushed, not merged into the source repository, not deployed. |
+| 65865 | 98 |  | REQUIREMENT_UPDATED |  | scenario-reviewer (scripted) | Requirement amended to revision 2 by scenario-reviewer (scripted): Reformat the requirement as a bulleted list (no content change).. Resume to re-plan affected stages. |
+| 65882 | 99 |  | RUN_RESUMED |  | engine | Drive #3 (RESUME), max parallelism 3, layers [[requirements], [design], [implementation], [tests, security, docs], [release]]. |
+| 65889 | 100 | requirements | TASK_INVALIDATED |  | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
+| 65893 | 101 | requirements | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
+| 65897 | 102 | security | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65902 | 103 | security | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65905 | 104 | tests | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65909 | 105 | tests | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65912 | 106 | docs | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65916 | 107 | docs | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65919 | 108 | release | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65923 | 109 | release | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65925 | 110 | design | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65930 | 111 | design | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65931 | 112 | implementation | TASK_INVALIDATED |  | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65935 | 113 | implementation | TASK_TRANSITION | SUCCEEDED → INVALIDATED | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 65953 | 115 | requirements | TASK_TRANSITION | INVALIDATED → READY | engine | Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed. |
+| 65960 | 116 | requirements | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 65962 | 117 | requirements | TASK_STARTED |  | engine | Fingerprint 1b1748d92e4a; inputs []. |
+| 65970 | 118 | requirements | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: REQ-ENTRY-1 ok; REQ-ENTRY-2 ok |
+| 65975 | 119 | requirements | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 66148 | 120 | requirements | ARTIFACT_STORED |  | engine | requirement-spec@v2 (DETERMINISTIC_DEMO) produced from []. |
+| 66151 | 121 | requirements | AGENT_RESULT |  | engine | Normalized the requirement into 4 functional and 0 non-functional statements with 4 acceptance criteria. |
+| 66162 | 122 | requirements | EXIT_GATE_PASSED |  | engine | EXIT gate passed: REQ-EXIT-1 ok; REQ-EXIT-2 ok; REQ-EXIT-3 ok; REQ-EXIT-4 ok |
+| 66171 | 123 | requirements | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 66176 | 124 | requirements | TASK_SUCCEEDED |  | engine | Accepted requirement-spec. |
+| 66186 | 126 | design | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66212 | 127 | design | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
+| 66216 | 128 | design | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 4bad783f1d2d): reusing architecture-design@v1 from attempt 1 without re-executing. |
+| 66228 | 130 | implementation | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66235 | 131 | implementation | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
+| 66238 | 132 | implementation | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 296628609870): reusing implementation-plan@v1 from attempt 1, change-patch@v1 from attempt 1, interface-contract@v1 from attempt 1 without re-executing. |
+| 66246 | 134 | tests | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66252 | 136 | security | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66259 | 138 | docs | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66267 | 139 | tests | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
+| 66270 | 140 | tests | TASK_REUSED |  | engine | Inputs unchanged (fingerprint adc959233cff): reusing test-plan@v1 from attempt 2, test-report@v1 from attempt 2 without re-executing. |
+| 66276 | 141 | security | TASK_TRANSITION | READY → RUNNING | engine |  |
+| 66279 | 142 | security | TASK_STARTED |  | engine | Fingerprint 57407af11698; inputs [requirement-spec@v2, architecture-design@v1, implementation-plan@v1, change-patch@v1]. |
+| 66287 | 143 | security | ENTRY_GATE_PASSED |  | engine | ENTRY gate passed: SEC-ENTRY-1 ok |
+| 66290 | 144 | docs | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
+| 66292 | 145 | security | TASK_ATTEMPT_STARTED |  | engine | Attempt 1 of at most 3 in this drive. |
+| 66294 | 146 | docs | TASK_REUSED |  | engine | Inputs unchanged (fingerprint 9361b5bbcb9d): reusing documentation@v1 from attempt 1 without re-executing. |
+| 66515 | 147 | security | ARTIFACT_STORED |  | engine | risk-assessment@v2 (DETERMINISTIC_DEMO) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 66533 | 148 | security | ARTIFACT_STORED |  | engine | policy-report@v2 (DETERMINISTIC) produced from [architecture-design@v1, change-patch@v1, implementation-plan@v1, requirement-spec@v2]. |
+| 66538 | 149 | security | AGENT_RESULT |  | engine | Assessed 4 risks; policy check found 0 blocker(s) and 1 warning(s). |
+| 66546 | 150 | security | EXIT_GATE_PASSED |  | engine | EXIT gate passed: SEC-EXIT-1 ok; SEC-EXIT-2 ok |
+| 66558 | 151 | security | TASK_TRANSITION | RUNNING → SUCCEEDED | engine |  |
+| 66563 | 152 | security | TASK_SUCCEEDED |  | engine | Accepted risk-assessment, policy-report. |
+| 66575 | 154 | release | TASK_TRANSITION | INVALIDATED → READY | engine | Upstream 'requirements' was invalidated (Input fingerprint changed (54cb965a5eda -> 1b1748d92e4a): requirement or input content changed.) |
+| 66596 | 155 | release | TASK_TRANSITION | READY → SUCCEEDED | engine |  |
+| 66600 | 156 | release | TASK_REUSED |  | engine | Inputs unchanged (fingerprint fcdd85cf3c62): reusing readiness-report@v1 from attempt 1 without re-executing; its approval is still valid for that exact version. |
+| 66613 | 157 |  | RUN_SUCCEEDED |  | engine | All 7 tasks SUCCEEDED. |
+| 66618 | 158 |  | RUN_DRIVE_ENDED |  | engine | Drive RESUME ended with run SUCCEEDED after 737 ms. |
 
 Audit chain: **intact** (158 events verified).

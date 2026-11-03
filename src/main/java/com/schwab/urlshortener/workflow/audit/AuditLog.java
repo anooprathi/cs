@@ -84,7 +84,9 @@ public class AuditLog {
                 return events.save(e);
             });
         }
-        java.util.Objects.requireNonNull(saved, "audit append returned no event");
+        if (saved == null) {
+            throw new IllegalStateException("audit append returned no event");
+        }
         log.info("workflow-audit run={} seq={} task={} type={} {}{} actor={} {}", saved.getRunId(), saved.getSequence(),
                 saved.getTaskKey(), saved.getType(), saved.getFromState() == null ? "" : saved.getFromState() + "->",
                 saved.getToState() == null ? "" : saved.getToState(), saved.getActor(), message == null ? "" : message);

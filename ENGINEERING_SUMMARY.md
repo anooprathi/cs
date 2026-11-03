@@ -906,3 +906,16 @@ bug: the "tenant key gets 403" probe reused folder 1's tenant, whose rate limit 
 just exhausted. The rate limiter answered 429 before authorization could answer 403. The probe now
 registers its own fresh tenant. A second run on the same instance fails only in the pre-existing folders
 0–7, which register fixed tenant names (409). Folders 8–9 pass on a re-run.
+
+### Review pass (submission readiness)
+A self-review against the assignment PDF and a fresh static-analysis run produced these findings. All were fixed:
+
+| Finding | Fix | Evidence |
+|---|---|---|
+| Generated changes had integration tests only; PDF 4.5 asks for unit **and** integration tests | Recipes now also emit Mockito service unit tests (`ClickLimitServiceTest`, `ExpiredLinkReactivationServiceTest`) and a pure mapper test (`UrlMappingMapperClickLimitTest`). The nested `mvn test` runs them | `ScenarioEndToEndTest` (greenfield's test stage now reports 11 passed results, up from 9) |
+| The patch didn't update the docs ("supporting documentation") | Recipes edit the README API-reference rows for the endpoints they change, via anchored edits, so they refuse if the table moved | `CodeRecipesTest` |
+| Impact analysis had no data-flow view (PDF 4.3 "data flows") | `ImpactAnalysis.dataFlows` (entry point → service → persistence; in demo mode derived from catalog layers and labeled as not traced through code). The quality gate blocks flows through unknown components, and the workflow design stage gained DES-EXIT-4 | `DeterministicAgentsTest`, `QualityGateReviewerTest`, `MarkdownRendererTest` |
+| The run summary had validation and limitations content only implicitly (PDF 4.8) | New **Validation** section (every task's exit gate as recorded + the readiness checklist), and the "what this run did NOT do" list is now headed **Limitations** | `WorkflowApiIntegrationTest#fullRun_throughTheApi`, Postman folder 9 |
+| No single testing-approach deliverable (PDF §5) | `docs/testing-approach.md`: layers, what's stubbed and why, what isn't tested, how generated code is tested | n/a |
+| README API table had no `/api/v1/workflows` row | Added | n/a |
+| 3 SpotBugs `NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE` findings never triaged | False positives (the value was already null-checked through `Objects.requireNonNull`, which SpotBugs counts as the dereference). Replaced with explicit null checks, so they clear | SpotBugs re-run |

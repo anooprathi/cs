@@ -17,8 +17,22 @@ public record ImpactAnalysis(
         @JsonPropertyDescription("Components that do not exist yet and would need to be created")
         List<ProposedComponent> newComponents,
         @JsonPropertyDescription("Notable areas deliberately left unchanged, with a short reason")
-        List<String> unaffectedAreas
+        List<String> unaffectedAreas,
+        @JsonPropertyDescription("Request/data flows through the impacted code, entry point first; every step must be a catalog "
+                + "component name or a proposed new component")
+        List<DataFlow> dataFlows
 ) {
+
+    /** One path data takes through the impacted components, e.g. redirect request → service → cache → repository. */
+    public record DataFlow(
+            @JsonPropertyDescription("Short name, e.g. 'RedirectController request path'")
+            String name,
+            @JsonPropertyDescription("Component names in the order the data passes through them")
+            List<String> steps,
+            @JsonPropertyDescription("What flows along this path and how the change affects it")
+            String description
+    ) {
+    }
 
     public enum ChangeType {
         MODIFY,
